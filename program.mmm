@@ -1,0 +1,8 @@
+10 SET $HelloWorld, "Hello World"
+15 SET $GoodNight, "Good Night World"
+20 LOAD $HelloWorld, $GoodNight
+30 CALLRM Print
+35 DROP $HelloWorld
+36 REM LOAD $HelloWorld, $GoodNight
+40 REM CALLRM Print
+50 CALL Print
