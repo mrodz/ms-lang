@@ -173,7 +173,7 @@ mod commands {
         if ctx.arguments.len() == 2 {
             let name = ctx.arguments.get(0).unwrap();
             if let Some('$') = name.chars().next() {
-                let maybe_value = &*ctx.arguments.get(1).unwrap();
+                let maybe_value = ctx.arguments.get(1).unwrap();
                 let value = var_from_str(maybe_value.to_string());
 
                 variables.insert(name.to_string(), value);
@@ -442,8 +442,8 @@ mod commands {
 
 		let dest_name = ctx.arguments.get(0).unwrap();
 		let _ = var_exists(dest_name, variables)?;
-		let var1 = var_exists(ctx.arguments.get(1).unwrap(), variables).unwrap();
-		let var2 = var_exists(ctx.arguments.get(2).unwrap(), variables).unwrap();
+		let var1 = var_exists(ctx.arguments.get(1).unwrap(), variables)?;
+		let var2 = var_exists(ctx.arguments.get(2).unwrap(), variables)?;
 
 		if let (Variable::Number(n1), Variable::Number(n2)) = (var1, var2) {
 			variables.insert(dest_name.to_string(), Variable::Boolean(n1 == n2));
@@ -508,7 +508,7 @@ mod commands {
             ));
         }
 
-		let _ = execute_function(&ctx.arguments[0], functions, variables, loaded_variables);
+		let _ = execute_function(&ctx.arguments[0], functions, variables, loaded_variables)?;
 
         Ok(())
     }
@@ -690,11 +690,9 @@ pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Er
     for line in lines {
         if line.starts_with('~') && line.len() >= 2 {
             if let Some(init_fn_name) = init_fn_name {
+				result.sort_by(|a: &Line, b: &Line| a.number.cmp(&b.number));
                 functions.insert(init_fn_name, result);
                 result = Vec::new();
-                // fn_lines.sort_by(|a, b| a.number.cmp(&b.number));
-                // let m = fn_lines.into_boxed_slice();
-                // functions.insert(init_fn_name, &m);
             }
 
             init_fn_name = Some(line[1..line.len()].to_string());
