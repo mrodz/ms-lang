@@ -79,8 +79,8 @@ lazy_static! {
         let mut command_map = HashMap::<String, command_types::Command>::new();
         command_map.insert("SET".into(), commands::set as command_types::Command);
         command_map.insert("LOAD".into(), commands::load);
-        command_map.insert("CALL".into(), commands::call);
-        command_map.insert("CALLRM".into(), commands::call_d);
+        command_map.insert("SYSCALL".into(), commands::call);
+        command_map.insert("SYSCALLRM".into(), commands::call_d);
         command_map.insert("POPALL".into(), commands::pop_all);
         command_map.insert("DROPALL".into(), commands::drop_all);
         command_map.insert("DROP".into(), commands::drop);
@@ -189,7 +189,6 @@ mod commands {
                     "Invalid 'SET' on line {}\r\n\tSyntax --\r\n\tSET $VarName, VALUE",
                     ctx.number
                 )
-                .to_string(),
             ));
         }
         Ok(())
@@ -231,24 +230,54 @@ mod commands {
     }
 
     pub fn call(
-        _ctx: &Line,
-        _variables: &mut VarMapping,
+        ctx: &Line,
+        variables: &mut VarMapping,
         loaded_variables: &mut LoadedVars,
         _function_context: &FunctionContext,
         _functions: &GlobalFunctions,
     ) -> CommandRet {
-        built_in_functions::print(loaded_variables);
+        if ctx.arguments.len() != 1 && ctx.arguments.len() != 2 {
+            return Err(CompilerError::new(format!(
+                "Invalid 'SYSCALL' on line {}\r\n\tSyntax --\r\n\tSYSCALL NativeFunctionName, OptionalReturnAddress",
+                ctx.number
+            )))
+        }
+
+        let func_name = ctx.arguments[0].as_str();
+
+        let result = (match func_name {
+            "Print" => built_in_functions::print,
+            "PrintLn" => built_in_functions::println,
+            "StrCat" => built_in_functions::str_cat,
+            "CharAt" => built_in_functions::char_at,
+            _ => {
+                return Err(CompilerError::new(format!("{} is not a native function.", func_name)))
+            }
+        })(loaded_variables);
+
+        if let (Ok(Some(result)), Some(name)) = (result, ctx.arguments.get(1)) {
+            if !variables.contains_key(name) {
+                return Err(CompilerError::new(format!(
+                    "Variable '{}' has not been declared, but it is referenced on line {}",
+                    name, ctx.number
+                )));
+            }
+
+            variables.insert(name.to_string(), result);
+        }
+
         Ok(())
     }
 
     pub fn call_d(
-        _ctx: &Line,
-        _variables: &mut VarMapping,
+        ctx: &Line,
+        variables: &mut VarMapping,
         loaded_variables: &mut LoadedVars,
-        _function_context: &FunctionContext,
-        _functions: &GlobalFunctions,
+        function_context: &FunctionContext,
+        functions: &GlobalFunctions,
     ) -> CommandRet {
-        built_in_functions::print(loaded_variables);
+        call(ctx, variables, loaded_variables, function_context, functions)?;
+    
         loaded_variables.clear();
         Ok(())
     }
@@ -369,14 +398,11 @@ mod commands {
                 )
                 .to_string(),
             ));
-        } else if let Some(_) = variables.get(ctx.arguments.get(0).unwrap()) {
-            variables.remove(ctx.arguments.get(0).unwrap());
-        } else {
+        } else if variables.remove(ctx.arguments.get(0).unwrap()).is_none() {
             return Err(CompilerError::new(
                 format!("Variable {} is not loaded.", ctx.arguments.get(0).unwrap()).to_string(),
             ));
         }
-        variables.clear();
         Ok(())
     }
 
@@ -515,9 +541,9 @@ mod commands {
 }
 
 mod built_in_functions {
-    use super::command_types::LoadedVars;
+    use super::{command_types::LoadedVars, Variable, CompilerError};
 
-    pub fn print(loaded_variables: &mut LoadedVars) {
+    pub fn print(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
         let mut string_buf = String::new();
 
         for var in loaded_variables {
@@ -525,7 +551,51 @@ mod built_in_functions {
             string_buf.push(' ');
         }
 
-        println!("{}", string_buf.trim_end())
+        print!("{}", string_buf.trim_end());
+
+        Ok(None)
+    }
+
+    pub fn println(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
+        print(loaded_variables);
+        println!();
+
+        Ok(None)
+    }
+
+    pub fn str_cat(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
+        let mut result: String = String::new();
+
+        for var in loaded_variables {
+            result.push_str(var.to_string().as_str());
+        }
+
+        Ok(Some(Variable::String(result)))
+    }
+
+    pub fn char_at(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
+        if loaded_variables.len() != 2 {
+            return Err(CompilerError::new(format!(
+                "Invalid function call\r\n\tExpected two loaded variables (<str>, <num>)",
+            )));
+        }
+
+        if let (Some(Variable::String(as_str)), Some(Variable::Number(index))) = (loaded_variables.get(0), loaded_variables.get(1)) {
+            
+            if let Some(result) = as_str.chars().nth(*index as usize) {
+                Ok(Some(Variable::String(result.to_string())))
+            } else {
+                Err(CompilerError::new(format!(
+                    "Invalid function call\r\n\tCould not index into string at {}",
+                    index
+                )))
+            }
+
+        } else {
+            Err(CompilerError::new(format!(
+                "Invalid function call\r\n\tExpected two loaded variables (<str>, <num>)\r\n\tFound mismatched types",
+            )))
+        }
     }
 }
 
