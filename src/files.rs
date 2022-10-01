@@ -7,6 +7,8 @@ use lazy_static::lazy_static;
 
 use crate::files::command_types::{FunctionContext, GlobalFunctions};
 
+use self::command_types::Command;
+
 mod command_types {
     use super::{CompilerError, Line, Variable};
     use std::collections::HashMap;
@@ -93,6 +95,9 @@ lazy_static! {
         command_map.insert("ROOT".into(), commands::sqrt);
         command_map.insert("MOD".into(), commands::r#mod);
         command_map.insert("JMP".into(), commands::jmp);
+		command_map.insert("IF".into(), commands::if_jmp);
+		command_map.insert("CMP".into(), commands::cmp);
+		command_map.insert("MOV".into(), commands::mov);
 
         command_map
     };
@@ -144,6 +149,7 @@ pub fn var_from_str(string: String) -> Variable {
 }
 
 mod commands {
+    use super::Variable;
     use super::built_in_functions;
     use super::command_types::*;
     use super::execute_function;
@@ -151,8 +157,11 @@ mod commands {
     use super::CompilerError;
     use super::Line;
 
-    pub fn var_exists<'a>(name: &String, variables: &'a VarMapping) -> Option<&'a super::Variable> {
-        variables.get(name)
+    pub fn var_exists<'a>(name: &String, variables: &'a VarMapping) -> Result<&'a super::Variable, CompilerError> {
+        match variables.get(name) {
+			Some(v) => Ok(v),
+			None => Err(CompilerError::new(format!("Variable {name} is not in scope.")))
+		}
     }
 
     pub fn set(
@@ -277,9 +286,9 @@ mod commands {
         	if let [name1, name2] = ctx.arguments.as_slice() {
             	let maybe1 = var_exists(&name1, variables);
             	let maybe2 = var_exists(&name2, variables);
-            	let maybe2_is = maybe2.is_none();
+            	let maybe2_is = maybe2.is_err();
 
-            	if maybe1.is_some() {
+            	if maybe1.is_ok() {
                 	let n1 = match maybe1.unwrap() {
                     	super::Variable::Number(n1) => *n1,
                     	_ => {
@@ -292,7 +301,7 @@ mod commands {
 
                 	use std::str::FromStr;
 
-	                let n2 = if maybe2.is_some() {
+	                let n2 = if !maybe2_is {
     	                match maybe2.unwrap() {
         	                super::Variable::Number(n2) => *n2,
             	            _ => {
@@ -370,6 +379,105 @@ mod commands {
         Ok(())
     }
 
+	pub fn if_jmp(
+		ctx: &Line,
+        variables: &mut VarMapping,
+        loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+		functions: &GlobalFunctions
+	) -> CommandRet {
+		if ctx.arguments.len() != 3 {
+			return Err(CompilerError::new(
+                format!(
+                    "Invalid 'IF' on line {}\r\n\tSyntax --\r\n\tIF $BoolVarName, FunctionName1, FunctionName2",
+                    ctx.number
+                ).to_string(),
+            ));
+		}
+
+		let predicate = var_exists(ctx.arguments.get(0).unwrap(), variables)?;
+
+		if let Variable::Boolean(as_bool) = predicate {
+			let _ = if *as_bool {
+				execute_function(ctx.arguments.get(1).unwrap(), functions, variables, loaded_variables)
+			} else {
+				execute_function(ctx.arguments.get(2).unwrap(), functions, variables, loaded_variables)
+			};
+		} else {
+			return Err(CompilerError::new(
+				format!("Invalid data types on line {}: Expected <bool>", ctx.number)
+					.to_string(),
+			));
+		}
+
+		Ok(())
+	}
+
+	pub fn cmp(
+		ctx: &Line,
+        variables: &mut VarMapping,
+        _loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+		_functions: &GlobalFunctions
+	) -> CommandRet {
+		if ctx.arguments.len() != 3 {
+			return Err(CompilerError::new(
+                format!(
+                    "Invalid 'CMP' on line {}\r\n\tSyntax --\r\n\tCMP $DestinationVarName, $VarName1, $VarName2",
+                    ctx.number
+                ).to_string(),
+            ));
+		}
+
+		let dest_name = ctx.arguments.get(0).unwrap();
+		let _ = var_exists(dest_name, variables)?;
+		let var1 = var_exists(ctx.arguments.get(1).unwrap(), variables)?;
+		let var2 = var_exists(ctx.arguments.get(2).unwrap(), variables)?;
+
+		if let (Variable::Number(n1), Variable::Number(n2)) = (var1, var2) {
+			variables.insert(dest_name.to_string(), Variable::Boolean(n1 == n2));
+			return Ok(())
+		}
+
+		if let (Variable::String(n1), Variable::String(n2)) = (var1, var2) {
+			variables.insert(dest_name.to_string(), Variable::Boolean(n1 == n2));
+			return Ok(())
+		}
+
+		if let (Variable::Boolean(n1), Variable::Boolean(n2)) = (var1, var2) {
+			variables.insert(dest_name.to_string(), Variable::Boolean(n1 == n2));
+			return Ok(())
+		}
+
+		Ok(())
+	}
+
+	pub fn mov(
+		ctx: &Line,
+        variables: &mut VarMapping,
+        _loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+		_functions: &GlobalFunctions
+	) -> CommandRet {
+		if ctx.arguments.len() != 2 {
+			return Err(CompilerError::new(
+                format!(
+                    "Invalid 'MOV' on line {}\r\n\tSyntax --\r\n\tMOV $VarName1, $VarName2",
+                    ctx.number
+                )
+                .to_string(),
+            ));
+		}
+
+		let var1_name = ctx.arguments.get(0).unwrap();
+		let _ = var_exists(var1_name, variables)?;
+		let var2 = var_exists(ctx.arguments.get(1).unwrap(), variables)?;
+		
+		variables.insert(var1_name.to_string(), var2.to_owned());
+		
+		Ok(())
+	}
+
     pub fn jmp(
         ctx: &Line,
         variables: &mut VarMapping,
@@ -387,7 +495,6 @@ mod commands {
             ));
         }
 
-        // let _ = execute_named_function((ctx.arguments.get(0).unwrap(), ), variables, loaded_variables);
 		let _ = execute_function(&ctx.arguments[0], functions, variables, loaded_variables);
 
         Ok(())
@@ -409,45 +516,15 @@ mod built_in_functions {
     }
 }
 
-// pub fn execute_named_function(
-// 	function: &FunctionContext,
-// 	// command_map: &HashMap<&str, Command>,
-//     variable_mapping: &mut HashMap<String, Variable>,
-//     loaded_variables: &mut Vec<Variable>
-// ) -> Result<(), CompilerError> {
-// 	for line in function.1 {
-// 		let callable = match COMMAND_MAP.get(line.command.as_str()) {
-// 			Some(n) => *n,
-// 			None => {
-// 				return Err(CompilerError::new(format!(
-// 					"Unknown command: {}",
-// 					line.command
-// 				)))
-// 			}
-// 		};
-
-// 		let result = callable(&line, variable_mapping, loaded_variables, &(function.0.to_string(), function.1), );
-
-// 		if result.is_err() {
-// 			return Err(CompilerError::new(
-// 				format!("Error: {:?}", result.err().unwrap()).to_string(),
-// 			));
-// 		}
-// 	}
-
-// 	Ok(())
-// }
-
 pub fn execute_function(
     name: &String,
     functions: &GlobalFunctions,
-    // command_map: &HashMap<&str, Command>,
     variable_mapping: &mut HashMap<String, Variable>,
     loaded_variables: &mut Vec<Variable>,
 ) -> Result<(), CompilerError> {
     if let Some(lines) = functions.get(name) {
         for line in lines {
-            let callable = match COMMAND_MAP.get(line.command.as_str()) {
+            let callable: Command = match COMMAND_MAP.get(line.command.as_str()) {
                 Some(n) => *n,
                 None => {
                     return Err(CompilerError::new(format!(
@@ -610,6 +687,10 @@ pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Er
             init_fn_name = Some(line[1..line.len()].to_string());
             continue;
         }
+
+		if line.len() == 0 {
+			continue;
+		}
 
         let tokens = split_string(&line.to_string())?;
 

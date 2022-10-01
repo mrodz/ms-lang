@@ -1,5 +1,32 @@
+~.Data
+0000 SET $number, 5
+0010 SET $result, -1
+
 ~Main
-000 SET $a, "Hello World"
-010 LOAD $a
-020 CALLRM Print
-030 JMP Main
+0100 JMP .Data
+0110 JMP CalculateFactorial
+0120 LOAD $result
+0130 CALL Print
+0140 POP $result
+0150 DROPALL
+
+~CalculateFactorial
+1000 SET $__CalculateFactorial.iter, 1
+1010 SET $__CalculateFactorial.result, 1
+1020 SET $__CalculateFactorial.done, false
+1030 ADD $number, 1
+1040 JMP CalculateFactorial<init>
+
+~CalculateFactorial<init>
+1100 CMP $__CalculateFactorial.done, $__CalculateFactorial.iter, $number
+1110 IF $__CalculateFactorial.done, CalculateFactorial<init:loop_end>, CalculateFactorial<init:loop_cont>
+
+~CalculateFactorial<init:loop_cont>
+1200 MULT $__CalculateFactorial.result, $__CalculateFactorial.iter
+1210 ADD $__CalculateFactorial.iter, 1
+1211 REM LOAD $__CalculateFactorial.iter, $__CalculateFactorial.result
+1212 REM CALLRM Print
+1220 JMP CalculateFactorial<init>
+
+~CalculateFactorial<init:loop_end>
+1300 MOV $result, $__CalculateFactorial.result
