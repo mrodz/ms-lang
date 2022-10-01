@@ -1,13 +1,11 @@
+use lazy_static::lazy_static;
+
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::str::{FromStr, Lines};
 
-use lazy_static::lazy_static;
-
-use crate::files::command_types::{FunctionContext, GlobalFunctions};
-
-use self::command_types::Command;
+use self::command_types::{Command,GlobalFunctions};
 
 mod command_types {
     use super::{CompilerError, Line, Variable};
@@ -98,6 +96,7 @@ lazy_static! {
 		command_map.insert("IF".into(), commands::if_jmp);
 		command_map.insert("CMP".into(), commands::cmp);
 		command_map.insert("MOV".into(), commands::mov);
+		command_map.insert("DBG".into(), commands::dbg);
 
         command_map
     };
@@ -195,6 +194,18 @@ mod commands {
         }
         Ok(())
     }
+
+	pub fn dbg(
+		ctx: &Line,
+        _variables: &mut VarMapping,
+        _loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions,
+	) -> CommandRet {
+		println!("[DEBUG {}] {}", ctx.number, ctx.arguments.get(0).unwrap_or(&"".to_string()));
+
+		Ok(())
+	}
 
     pub fn load(
         ctx: &Line,
@@ -431,8 +442,8 @@ mod commands {
 
 		let dest_name = ctx.arguments.get(0).unwrap();
 		let _ = var_exists(dest_name, variables)?;
-		let var1 = var_exists(ctx.arguments.get(1).unwrap(), variables)?;
-		let var2 = var_exists(ctx.arguments.get(2).unwrap(), variables)?;
+		let var1 = var_exists(ctx.arguments.get(1).unwrap(), variables).unwrap();
+		let var2 = var_exists(ctx.arguments.get(2).unwrap(), variables).unwrap();
 
 		if let (Variable::Number(n1), Variable::Number(n2)) = (var1, var2) {
 			variables.insert(dest_name.to_string(), Variable::Boolean(n1 == n2));
@@ -470,8 +481,10 @@ mod commands {
 		}
 
 		let var1_name = ctx.arguments.get(0).unwrap();
-		let _ = var_exists(var1_name, variables)?;
-		let var2 = var_exists(ctx.arguments.get(1).unwrap(), variables)?;
+
+		let _ = var_exists(var1_name, variables).unwrap();
+
+		let var2 = var_exists(ctx.arguments.get(1).unwrap(), variables).unwrap();
 		
 		variables.insert(var1_name.to_string(), var2.to_owned());
 		
