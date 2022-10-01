@@ -1,10 +1,5 @@
-000 SET $a, 5
-010 SET $b, 10
-020 ADD $a, $b
-030 LOAD $a
-040 CALL Print
-050 POW $a, 2
-054 POPALL
-055 LOAD $a
-060 CALL Print
-070 DROPALL
+~Main
+000 SET $a, "Hello World"
+010 LOAD $a
+020 CALLRM Print
+030 JMP Main

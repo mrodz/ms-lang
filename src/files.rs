@@ -3,7 +3,9 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::str::{FromStr, Lines};
 
-use self::command_types::Command;
+use lazy_static::lazy_static;
+
+use crate::files::command_types::{FunctionContext, GlobalFunctions};
 
 mod command_types {
     use super::{CompilerError, Line, Variable};
@@ -12,7 +14,15 @@ mod command_types {
     pub type VarMapping = HashMap<String, Variable>;
     pub type LoadedVars = Vec<Variable>;
     pub type CommandRet = Result<(), CompilerError>;
-    pub type Command = fn(&Line, &mut VarMapping, &mut LoadedVars) -> CommandRet;
+    pub type FunctionContext<'a> = (String, &'a Vec<Line>);
+    pub type GlobalFunctions = HashMap<String, Vec<Line>>;
+    pub type Command = fn(
+        &Line,
+        &mut VarMapping,
+        &mut LoadedVars,
+        &FunctionContext,
+        &GlobalFunctions,
+    ) -> CommandRet;
 }
 
 #[derive(Debug)]
@@ -64,8 +74,35 @@ impl CompilerError {
     }
 }
 
+lazy_static! {
+    static ref COMMAND_MAP: HashMap<String, command_types::Command> = {
+        let mut command_map = HashMap::<String, command_types::Command>::new();
+        command_map.insert("SET".into(), commands::set as command_types::Command);
+        command_map.insert("LOAD".into(), commands::load);
+        command_map.insert("CALL".into(), commands::call);
+        command_map.insert("CALLRM".into(), commands::call_d);
+        command_map.insert("POPALL".into(), commands::pop_all);
+        command_map.insert("DROPALL".into(), commands::drop_all);
+        command_map.insert("DROP".into(), commands::drop);
+        command_map.insert("REM".into(), commands::rem);
+        command_map.insert("ADD".into(), commands::add);
+        command_map.insert("SUB".into(), commands::sub);
+        command_map.insert("MULT".into(), commands::mult);
+        command_map.insert("DIV".into(), commands::div);
+        command_map.insert("POW".into(), commands::pow);
+        command_map.insert("ROOT".into(), commands::sqrt);
+        command_map.insert("MOD".into(), commands::r#mod);
+        command_map.insert("JMP".into(), commands::jmp);
+
+        command_map
+    };
+}
+
 pub fn run_program(path: &String) {
-    fn build_program(path: &String) -> Result<Vec<Line>, Box<dyn std::error::Error>> {
+    let mut variable_mapping = HashMap::<String, Variable>::new();
+    let mut loaded_variables = Vec::<Variable>::new();
+
+    fn build_program(path: &String) -> Result<GlobalFunctions, Box<dyn std::error::Error>> {
         let fio = read_file(path)?;
         let mapping = map_lines(fio.lines())?;
         Ok(mapping)
@@ -79,7 +116,12 @@ pub fn run_program(path: &String) {
         }
     };
 
-    let traversed = traverse_lines(&mapping);
+    let traversed = traverse_lines(
+        &mapping,
+        &mapping,
+        &mut variable_mapping,
+        &mut loaded_variables,
+    );
     if traversed.is_err() {
         println!(
             "Error during compilation: {:?}",
@@ -98,35 +140,28 @@ pub fn var_from_str(string: String) -> Variable {
         return Variable::Boolean(boolean);
     }
 
-    // let chars = string.as_bytes();
-    // let len = chars.len();
-    // if chars[0] == b'"' && chars[len - 1] == b'"' {
-    // return Some(Variable::String(string[1..len].to_string()));
-    // }
-
-    // println!("!!{}", string);
-
     Variable::String(string)
-    // None
 }
 
 mod commands {
     use super::built_in_functions;
     use super::command_types::*;
+    use super::execute_function;
     use super::var_from_str;
     use super::CompilerError;
     use super::Line;
 
     pub fn var_exists<'a>(name: &String, variables: &'a VarMapping) -> Option<&'a super::Variable> {
-        // if variables.contains_key(&name) {
-        // Some(variables.get(&name))
         variables.get(name)
-        // } else {
-        // None
-        // }
     }
 
-    pub fn set(ctx: &Line, variables: &mut VarMapping, _: &mut LoadedVars) -> CommandRet {
+    pub fn set(
+        ctx: &Line,
+        variables: &mut VarMapping,
+        _: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions,
+    ) -> CommandRet {
         if ctx.arguments.len() == 2 {
             let name = ctx.arguments.get(0).unwrap();
             if let Some('$') = name.chars().next() {
@@ -156,6 +191,8 @@ mod commands {
         ctx: &Line,
         variables: &mut VarMapping,
         loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions,
     ) -> CommandRet {
         for var in ctx.arguments.as_slice() {
             if !variables.contains_key(var.as_str()) {
@@ -177,6 +214,8 @@ mod commands {
         _ctx: &Line,
         _variables: &mut VarMapping,
         loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions,
     ) -> CommandRet {
         built_in_functions::print(loaded_variables);
         Ok(())
@@ -186,6 +225,8 @@ mod commands {
         _ctx: &Line,
         _variables: &mut VarMapping,
         loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions,
     ) -> CommandRet {
         built_in_functions::print(loaded_variables);
         loaded_variables.clear();
@@ -196,6 +237,8 @@ mod commands {
         _ctx: &Line,
         _variables: &mut VarMapping,
         loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions,
     ) -> CommandRet {
         loaded_variables.clear();
         Ok(())
@@ -205,6 +248,8 @@ mod commands {
         _ctx: &Line,
         variables: &mut VarMapping,
         _loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions,
     ) -> CommandRet {
         variables.clear();
         Ok(())
@@ -213,75 +258,74 @@ mod commands {
     macro_rules! arithmetic {
       ($name:ident,$op:tt) => {
         pub fn $name(
-          ctx: &Line,
-          variables: &mut VarMapping,
-          _loaded_variables: &mut LoadedVars
+        	ctx: &Line,
+        	variables: &mut VarMapping,
+        	_loaded_variables: &mut LoadedVars,
+			_function_context: &FunctionContext,
+			_functions: &GlobalFunctions
         ) -> CommandRet {
-          if ctx.arguments.len() != 2 {
-            return Err(CompilerError::new(
-                format!(
-                    "Invalid '{}' on line {}\r\n\tSyntax --\r\n\tADD $VarName1, $VarName2",
-                    stringify!($name),
-                    ctx.number
-                )
-                .to_string(),
-            ));
-        }
+			if ctx.arguments.len() != 2 {
+            	return Err(CompilerError::new(
+                	format!(
+                    	"Invalid '{}' on line {}\r\n\tSyntax --\r\n\tADD $VarName1, $VarName2",
+                    	stringify!($name),
+                    	ctx.number
+                	).to_string(),
+            	));
+        	}
 
-        if let [name1, name2] = ctx.arguments.as_slice() {
-            let maybe1 = var_exists(&name1, variables);
-            let maybe2 = var_exists(&name2, variables);
-            let maybe2_is = maybe2.is_none();
+        	if let [name1, name2] = ctx.arguments.as_slice() {
+            	let maybe1 = var_exists(&name1, variables);
+            	let maybe2 = var_exists(&name2, variables);
+            	let maybe2_is = maybe2.is_none();
 
-            if maybe1.is_some() {
-                let n1 = match maybe1.unwrap() {
-                    super::Variable::Number(n1) => *n1,
-                    _ => {
-                        return Err(CompilerError::new(
-                            format!("Invalid data types on line {}: Expected <int>", ctx.number)
-                                .to_string(),
-                        ))
-                    }
-                };
+            	if maybe1.is_some() {
+                	let n1 = match maybe1.unwrap() {
+                    	super::Variable::Number(n1) => *n1,
+                    	_ => {
+                        	return Err(CompilerError::new(
+                            	format!("Invalid data types on line {}: Expected <int>", ctx.number)
+                                	.to_string(),
+                        	))
+                    	}
+                	};
 
-                use std::str::FromStr;
+                	use std::str::FromStr;
 
-                let n2 = if maybe2.is_some() {
-                    match maybe2.unwrap() {
-                        super::Variable::Number(n2) => *n2,
-                        _ => {
-                            return Err(CompilerError::new(
-                                format!(
-                                    "Invalid data types on line {}: Expected <int>",
-                                    ctx.number
-                                )
-                                .to_string(),
-                            ))
-                        }
-                    }
-                } else if let Ok(number) = f32::from_str(name2) {
-                    number
-                } else {
-                  println!("{:?}", maybe2);
-                  return Err(CompilerError::new(
-                          format!("Invalid data types on line {}: Expected <int>", ctx.number)
+	                let n2 = if maybe2.is_some() {
+    	                match maybe2.unwrap() {
+        	                super::Variable::Number(n2) => *n2,
+            	            _ => {
+                	            return Err(CompilerError::new(
+                    	            format!(
+                        	            "Invalid data types on line {}: Expected <int>",
+                            	        ctx.number
+                                	).to_string(),
+                            	))
+                        	}
+                    	}
+                	} else if let Ok(number) = f32::from_str(name2) {
+                    	number
+                	} else {
+                  		println!("{:?}", maybe2);
+						return Err(CompilerError::new(
+                        	format!("Invalid data types on line {}: Expected <int>", ctx.number)
                             .to_string(),
-                    ));
-                };
+                    	));
+                	};
 
-                #[allow(mutable_borrow_reservation_conflict)]
-                variables.insert(name1.to_string(), super::Variable::Number($op(n1, n2)));
-            } else if maybe2_is {
-                return Err(CompilerError::new(format!("Invalid '{}' on line {}\r\n\tAdding {} to {}, but at least one of these names are not in scope.", stringify!($name), ctx.number, name2, name2).to_string()));
-            }
-            // std::mem::drop(name2);
-        }
+                	#[allow(mutable_borrow_reservation_conflict)]
+                	variables.insert(name1.to_string(), super::Variable::Number($op(n1, n2)));
+            	} else if maybe2_is {
+                	return Err(CompilerError::new(format!("Invalid '{}' on line {}\r\n\tAdding {} to {}, but at least one of these names are not in scope.", stringify!($name), ctx.number, name2, name2).to_string()));
+            	}
+        	}
 
-        Ok(())
+        	Ok(())
         }
       }
     }
-  
+
     arithmetic!(add, (|n1, n2| n1 + n2));
     arithmetic!(sub, (|n1, n2| n1 - n2));
     arithmetic!(mult, (|n1, n2| n1 * n2));
@@ -294,6 +338,8 @@ mod commands {
         ctx: &Line,
         variables: &mut VarMapping,
         _loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+		_functions: &GlobalFunctions
     ) -> CommandRet {
         if ctx.arguments.len() != 1 {
             return Err(CompilerError::new(
@@ -318,7 +364,32 @@ mod commands {
         _ctx: &Line,
         _variables: &mut VarMapping,
         _loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+		_functions: &GlobalFunctions
     ) -> CommandRet {
+        Ok(())
+    }
+
+    pub fn jmp(
+        ctx: &Line,
+        variables: &mut VarMapping,
+        loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+		functions: &GlobalFunctions
+    ) -> CommandRet {
+        if ctx.arguments.len() != 1 {
+            return Err(CompilerError::new(
+                format!(
+                    "Invalid 'JMP' on line {}\r\n\tSyntax --\r\n\tJMP FunctionName",
+                    ctx.number
+                )
+                .to_string(),
+            ));
+        }
+
+        // let _ = execute_named_function((ctx.arguments.get(0).unwrap(), ), variables, loaded_variables);
+		let _ = execute_function(&ctx.arguments[0], functions, variables, loaded_variables);
+
         Ok(())
     }
 }
@@ -338,47 +409,90 @@ mod built_in_functions {
     }
 }
 
-pub fn traverse_lines<'a>(lines: &Vec<Line>) -> Result<(), CompilerError> {
-    let mut variable_mapping = HashMap::<String, Variable>::new();
-    let mut loaded_variables = Vec::<Variable>::new();
+// pub fn execute_named_function(
+// 	function: &FunctionContext,
+// 	// command_map: &HashMap<&str, Command>,
+//     variable_mapping: &mut HashMap<String, Variable>,
+//     loaded_variables: &mut Vec<Variable>
+// ) -> Result<(), CompilerError> {
+// 	for line in function.1 {
+// 		let callable = match COMMAND_MAP.get(line.command.as_str()) {
+// 			Some(n) => *n,
+// 			None => {
+// 				return Err(CompilerError::new(format!(
+// 					"Unknown command: {}",
+// 					line.command
+// 				)))
+// 			}
+// 		};
 
-    let mut command_map = HashMap::<&str, Command>::new();
-    command_map.insert("SET", commands::set as command_types::Command);
-    command_map.insert("LOAD", commands::load);
-    command_map.insert("CALL", commands::call);
-    command_map.insert("CALLRM", commands::call_d);
-    command_map.insert("POPALL", commands::pop_all);
-    command_map.insert("DROPALL", commands::drop_all);
-    command_map.insert("DROP", commands::drop);
-    command_map.insert("REM", commands::rem);
-    command_map.insert("ADD", commands::add);
-    command_map.insert("SUB", commands::sub);
-    command_map.insert("MULT", commands::mult);
-    command_map.insert("DIV", commands::div);
-    command_map.insert("POW", commands::pow);
-    command_map.insert("ROOT", commands::sqrt);
-    command_map.insert("MOD", commands::r#mod);
-  
+// 		let result = callable(&line, variable_mapping, loaded_variables, &(function.0.to_string(), function.1), );
 
-    for line in lines {
-        let callable = match command_map.get(line.command.as_str()) {
-            Some(n) => *n,
-            None => {
-                return Err(CompilerError::new(format!(
-                    "Unknown command: {}",
-                    line.command
-                )))
+// 		if result.is_err() {
+// 			return Err(CompilerError::new(
+// 				format!("Error: {:?}", result.err().unwrap()).to_string(),
+// 			));
+// 		}
+// 	}
+
+// 	Ok(())
+// }
+
+pub fn execute_function(
+    name: &String,
+    functions: &GlobalFunctions,
+    // command_map: &HashMap<&str, Command>,
+    variable_mapping: &mut HashMap<String, Variable>,
+    loaded_variables: &mut Vec<Variable>,
+) -> Result<(), CompilerError> {
+    if let Some(lines) = functions.get(name) {
+        for line in lines {
+            let callable = match COMMAND_MAP.get(line.command.as_str()) {
+                Some(n) => *n,
+                None => {
+                    return Err(CompilerError::new(format!(
+                        "Unknown command: {}",
+                        line.command
+                    )))
+                }
+            };
+
+            let result = callable(
+                &line,
+                variable_mapping,
+                loaded_variables,
+                &(name.to_string(), lines),
+                functions,
+            );
+
+            if result.is_err() {
+                return Err(CompilerError::new(
+                    format!("Error: {:?}", result.err().unwrap()).to_string(),
+                ));
             }
-        };
-
-        let result = callable(&line, &mut variable_mapping, &mut loaded_variables);
-
-        if result.is_err() {
-            return Err(CompilerError::new(
-                format!("Error: {:?}", result.err().unwrap()).to_string(),
-            ));
         }
     }
+
+    Ok(())
+}
+
+pub fn traverse_lines(
+    lines: &GlobalFunctions,
+    functions: &GlobalFunctions,
+    // command_map: &HashMap<&str, Command>,
+    variable_mapping: &mut HashMap<String, Variable>,
+    loaded_variables: &mut Vec<Variable>,
+) -> Result<(), CompilerError> {
+    if !lines.contains_key("Main") {
+        return Err(CompilerError::new("No Main function found.".into()));
+    }
+
+    let _ = execute_function(
+        &"Main".to_string(),
+        functions,
+        variable_mapping,
+        loaded_variables,
+    );
 
     Ok(())
 }
@@ -476,11 +590,27 @@ pub fn split_string(string: &String) -> Result<Vec<String>, String> {
     }
 }
 
-pub fn map_lines(lines: Lines) -> Result<Vec<Line>, Box<dyn std::error::Error>> {
+pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Error>> {
     let mut result = Vec::new();
     let mut line_numbers = HashSet::<u32>::new();
 
+    let mut init_fn_name: Option<String> = None;
+    let mut functions = HashMap::new();
+
     for line in lines {
+        if line.starts_with('~') && line.len() >= 2 {
+            if let Some(init_fn_name) = init_fn_name {
+                functions.insert(init_fn_name, result);
+                result = Vec::new();
+                // fn_lines.sort_by(|a, b| a.number.cmp(&b.number));
+                // let m = fn_lines.into_boxed_slice();
+                // functions.insert(init_fn_name, &m);
+            }
+
+            init_fn_name = Some(line[1..line.len()].to_string());
+            continue;
+        }
+
         let tokens = split_string(&line.to_string())?;
 
         let mut tokens = tokens.into_iter();
@@ -522,9 +652,11 @@ pub fn map_lines(lines: Lines) -> Result<Vec<Line>, Box<dyn std::error::Error>> 
         })
     }
 
-    result.sort_by(|a, b| a.number.cmp(&b.number));
+    if let Some(fn_name) = init_fn_name {
+        functions.insert(fn_name, result);
+    }
 
-    Ok(result)
+    Ok(functions)
 }
 
 pub fn read_file(path: &String) -> Result<String, CompilerError> {
