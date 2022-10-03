@@ -1,16 +1,7 @@
 ~Main
-0010 SET $a, "Fizz"
-0020 SET $b, "Buzz"
-0030 SET $c, ""
-0040 LOAD $a, $b
-0050 SYSCALLRM StrCat, $c
-0060 DROP $a
-0070 DROP $b
-0080 LOAD $c
-0090 SYSCALLRM PrintLn
-0100 SET $d, ""
-0110 SET $i, 3
-0120 LOAD $c, $i
-0130 SYSCALLRM CharAt, $d
-0140 LOAD $d
-0150 SYSCALLRM PrintLn
+0000 SET $a, 01
+0010 SET $b, 0001
+0020 SET $c, false
+0030 CMP $c, $a, $b
+0040 LOAD $c
+0050 SYSCALLRM PrintLn

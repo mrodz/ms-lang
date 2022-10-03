@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::str::{FromStr, Lines};
 
-use self::command_types::{Command,GlobalFunctions};
+use self::command_types::{Command, GlobalFunctions};
 
 mod command_types {
     use super::{CompilerError, Line, Variable};
@@ -77,27 +77,38 @@ impl CompilerError {
 lazy_static! {
     static ref COMMAND_MAP: HashMap<String, command_types::Command> = {
         let mut command_map = HashMap::<String, command_types::Command>::new();
-        command_map.insert("SET".into(), commands::set as command_types::Command);
-        command_map.insert("LOAD".into(), commands::load);
-        command_map.insert("SYSCALL".into(), commands::call);
-        command_map.insert("SYSCALLRM".into(), commands::call_d);
-        command_map.insert("POPALL".into(), commands::pop_all);
-        command_map.insert("DROPALL".into(), commands::drop_all);
-        command_map.insert("DROP".into(), commands::drop);
-        command_map.insert("REM".into(), commands::rem);
-        command_map.insert("ADD".into(), commands::add);
-        command_map.insert("SUB".into(), commands::sub);
-        command_map.insert("MULT".into(), commands::mult);
-        command_map.insert("DIV".into(), commands::div);
-        command_map.insert("POW".into(), commands::pow);
-        command_map.insert("ROOT".into(), commands::sqrt);
-        command_map.insert("MOD".into(), commands::r#mod);
-        command_map.insert("JMP".into(), commands::jmp);
-		command_map.insert("IF".into(), commands::if_jmp);
-		command_map.insert("CMP".into(), commands::cmp);
-		command_map.insert("MOV".into(), commands::mov);
-		command_map.insert("DBG".into(), commands::dbg);
 
+        macro_rules! insert_command {
+            ($name:ident, $func:ident) => {
+                command_map.insert(stringify!($name).to_ascii_uppercase(), commands::$func as command_types::Command);
+            };
+        }
+        
+        insert_command!(SET, set);
+        insert_command!(LOAD, load);
+        insert_command!(SYSCALL, call);
+        insert_command!(SYSCALLRM, call_d);
+        insert_command!(POPALL, pop_all);
+        insert_command!(DROPALL, drop_all);
+        insert_command!(DROP, drop);
+        insert_command!(REM, rem);
+        insert_command!(ADD, add);
+        insert_command!(SUB, sub);
+        insert_command!(MULT, mult);
+        insert_command!(DIV, div);
+        insert_command!(POW, pow);
+        insert_command!(ROOT, sqrt);
+        insert_command!(MOD, r#mod);        
+        insert_command!(JMP, jmp);
+        insert_command!(IF, if_jmp);
+        insert_command!(CMP, cmp);
+        insert_command!(MOV, mov);
+        insert_command!(DBG, dbg);
+        insert_command!(AND, and);
+        insert_command!(OR, or);
+        insert_command!(XOR, xor);
+        insert_command!(NOT, not);
+        
         command_map
     };
 }
@@ -148,19 +159,24 @@ pub fn var_from_str(string: String) -> Variable {
 }
 
 mod commands {
-    use super::Variable;
     use super::built_in_functions;
     use super::command_types::*;
     use super::execute_function;
     use super::var_from_str;
     use super::CompilerError;
     use super::Line;
+    use super::Variable;
 
-    pub fn var_exists<'a>(name: &String, variables: &'a VarMapping) -> Result<&'a super::Variable, CompilerError> {
+    pub fn var_exists<'a>(
+        name: &String,
+        variables: &'a VarMapping,
+    ) -> Result<&'a super::Variable, CompilerError> {
         match variables.get(name) {
-			Some(v) => Ok(v),
-			None => Err(CompilerError::new(format!("Variable {name} is not in scope.")))
-		}
+            Some(v) => Ok(v),
+            None => Err(CompilerError::new(format!(
+                "Variable {name} is not in scope."
+            ))),
+        }
     }
 
     pub fn set(
@@ -184,27 +200,29 @@ mod commands {
                 )));
             }
         } else {
-            return Err(CompilerError::new(
-                format!(
-                    "Invalid 'SET' on line {}\r\n\tSyntax --\r\n\tSET $VarName, VALUE",
-                    ctx.number
-                )
-            ));
+            return Err(CompilerError::new(format!(
+                "Invalid 'SET' on line {}\r\n\tSyntax --\r\n\tSET $VarName, VALUE",
+                ctx.number
+            )));
         }
         Ok(())
     }
 
-	pub fn dbg(
-		ctx: &Line,
+    pub fn dbg(
+        ctx: &Line,
         _variables: &mut VarMapping,
         _loaded_variables: &mut LoadedVars,
         _function_context: &FunctionContext,
         _functions: &GlobalFunctions,
-	) -> CommandRet {
-		println!("[DEBUG {}] {}", ctx.number, ctx.arguments.get(0).unwrap_or(&"".to_string()));
+    ) -> CommandRet {
+        println!(
+            "[DEBUG {}] {}",
+            ctx.number,
+            ctx.arguments.get(0).unwrap_or(&"".to_string())
+        );
 
-		Ok(())
-	}
+        Ok(())
+    }
 
     pub fn load(
         ctx: &Line,
@@ -240,7 +258,7 @@ mod commands {
             return Err(CompilerError::new(format!(
                 "Invalid 'SYSCALL' on line {}\r\n\tSyntax --\r\n\tSYSCALL NativeFunctionName, OptionalReturnAddress",
                 ctx.number
-            )))
+            )));
         }
 
         let func_name = ctx.arguments[0].as_str();
@@ -251,7 +269,10 @@ mod commands {
             "StrCat" => built_in_functions::str_cat,
             "CharAt" => built_in_functions::char_at,
             _ => {
-                return Err(CompilerError::new(format!("{} is not a native function.", func_name)))
+                return Err(CompilerError::new(format!(
+                    "{} is not a native function.",
+                    func_name
+                )))
             }
         })(loaded_variables);
 
@@ -276,8 +297,14 @@ mod commands {
         function_context: &FunctionContext,
         functions: &GlobalFunctions,
     ) -> CommandRet {
-        call(ctx, variables, loaded_variables, function_context, functions)?;
-    
+        call(
+            ctx,
+            variables,
+            loaded_variables,
+            function_context,
+            functions,
+        )?;
+
         loaded_variables.clear();
         Ok(())
     }
@@ -356,7 +383,6 @@ mod commands {
                 	} else if let Ok(number) = f32::from_str(name2) {
                     	number
                 	} else {
-                  		println!("{:?}", maybe2);
 						return Err(CompilerError::new(
                         	format!("Invalid data types on line {}: Expected <int>", ctx.number)
                             .to_string(),
@@ -388,7 +414,7 @@ mod commands {
         variables: &mut VarMapping,
         _loaded_variables: &mut LoadedVars,
         _function_context: &FunctionContext,
-		_functions: &GlobalFunctions
+        _functions: &GlobalFunctions,
     ) -> CommandRet {
         if ctx.arguments.len() != 1 {
             return Err(CompilerError::new(
@@ -396,7 +422,6 @@ mod commands {
                     "Invalid 'DROP' on line {}\r\n\tSyntax --\r\n\tDROP $VarName",
                     ctx.number
                 )
-                .to_string(),
             ));
         } else if variables.remove(ctx.arguments.get(0).unwrap()).is_none() {
             return Err(CompilerError::new(
@@ -406,123 +431,207 @@ mod commands {
         Ok(())
     }
 
+    macro_rules! bool_comparisons {
+        ($name:ident, $func:tt) => {
+            pub fn $name(
+                ctx: &Line,
+                variables: &mut VarMapping,
+                _loaded_variables: &mut LoadedVars,
+                _function_context: &FunctionContext,
+                _functions: &GlobalFunctions,        
+            ) -> CommandRet {
+                if let (Some(first), Some(second)) = (ctx.arguments.get(0), ctx.arguments.get(1)) {
+                    if let (Some(var1), Some(var2)) = (variables.get(first), variables.get(second)) {
+                        if let (Variable::Boolean(var1), Variable::Boolean(var2)) = (var1, var2) {
+                            variables.insert(first.to_string(), Variable::Boolean($func(*var1, *var2)));
+                            Ok(())
+                        } else {
+                            Err(CompilerError::new(format!(
+                                "Invalid data types on line {}: Expected <boolean, boolean>",
+                                ctx.number
+                            )))    
+                        }
+                    } else {
+                        Err(CompilerError::new(format!(
+                            "Encountered undefined variables on line {}",
+                            ctx.number
+                        )))
+                    }
+                } else {
+                    Err(CompilerError::new(format!(
+                        "Invalid '{}' on line {}\r\n\tSyntax --\r\n\tAND $VarName1, $VarName2",
+                        stringify!($name),
+                        ctx.number
+                    )))
+                }
+            }
+        };
+    }
+
+    bool_comparisons!(and, (|a, b| a && b));
+    bool_comparisons!(or, (|a, b| a || b));
+    bool_comparisons!(xor, (|a, b| a ^ b));
+
+    pub fn not(
+        ctx: &Line,
+        variables: &mut VarMapping,
+        _loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions,
+    ) -> CommandRet {
+        if let Some(name) = ctx.arguments.get(0) {
+            if let Some(var) = variables.get(name) {
+                if let Variable::Boolean(var) = var {
+                    variables.insert(name.to_string(), Variable::Boolean(!var));
+                    Ok(())
+                } else {
+                    Err(CompilerError::new(
+                        format!("Invalid data types on line {}: Expected <bool>", ctx.number)
+                        .to_string(),
+                    ))          
+                }
+            } else {
+                Err(CompilerError::new(format!(
+                    "Variable '{}' has not been declared, but it is referenced on line {}",
+                    name, ctx.number
+                )))
+            }
+        } else {
+            Err(CompilerError::new(format!(
+                "Invalid 'NOT' on line {}\r\n\tSyntax --\r\n\tNOT $VarName",
+                ctx.number
+            )))
+        }
+    }
+
     pub fn rem(
         _ctx: &Line,
         _variables: &mut VarMapping,
         _loaded_variables: &mut LoadedVars,
         _function_context: &FunctionContext,
-		_functions: &GlobalFunctions
+        _functions: &GlobalFunctions,
     ) -> CommandRet {
         Ok(())
     }
 
-	pub fn if_jmp(
-		ctx: &Line,
+    pub fn if_jmp(
+        ctx: &Line,
         variables: &mut VarMapping,
         loaded_variables: &mut LoadedVars,
         _function_context: &FunctionContext,
-		functions: &GlobalFunctions
-	) -> CommandRet {
-		if ctx.arguments.len() != 3 {
-			return Err(CompilerError::new(
+        functions: &GlobalFunctions,
+    ) -> CommandRet {
+        if ctx.arguments.len() != 3 {
+            return Err(CompilerError::new(
                 format!(
                     "Invalid 'IF' on line {}\r\n\tSyntax --\r\n\tIF $BoolVarName, FunctionName1, FunctionName2",
                     ctx.number
                 ).to_string(),
             ));
-		}
+        }
 
-		let predicate = var_exists(ctx.arguments.get(0).unwrap(), variables)?;
+        let predicate = var_exists(ctx.arguments.get(0).unwrap(), variables)?;
 
-		if let Variable::Boolean(as_bool) = predicate {
-			let _ = if *as_bool {
-				execute_function(ctx.arguments.get(1).unwrap(), functions, variables, loaded_variables)
-			} else {
-				execute_function(ctx.arguments.get(2).unwrap(), functions, variables, loaded_variables)
-			};
-		} else {
-			return Err(CompilerError::new(
-				format!("Invalid data types on line {}: Expected <bool>", ctx.number)
-					.to_string(),
-			));
-		}
+        if let Variable::Boolean(as_bool) = predicate {
+            let _ = if *as_bool {
+                execute_function(
+                    ctx.arguments.get(1).unwrap(),
+                    functions,
+                    variables,
+                    loaded_variables,
+                )?
+            } else {
+                execute_function(
+                    ctx.arguments.get(2).unwrap(),
+                    functions,
+                    variables,
+                    loaded_variables,
+                )?
+            };
+        } else {
+            return Err(CompilerError::new(
+                format!("Invalid data types on line {}: Expected <bool>", ctx.number).to_string(),
+            ));
+        }
 
-		Ok(())
-	}
+        Ok(())
+    }
 
-	pub fn cmp(
-		ctx: &Line,
+    pub fn cmp(
+        ctx: &Line,
         variables: &mut VarMapping,
         _loaded_variables: &mut LoadedVars,
         _function_context: &FunctionContext,
-		_functions: &GlobalFunctions
-	) -> CommandRet {
-		if ctx.arguments.len() != 3 {
-			return Err(CompilerError::new(
+        _functions: &GlobalFunctions,
+    ) -> CommandRet {
+        if ctx.arguments.len() != 3 {
+            return Err(CompilerError::new(
                 format!(
                     "Invalid 'CMP' on line {}\r\n\tSyntax --\r\n\tCMP $DestinationVarName, $VarName1, $VarName2",
                     ctx.number
                 ).to_string(),
             ));
-		}
+        }
 
-		let dest_name = ctx.arguments.get(0).unwrap();
-		let _ = var_exists(dest_name, variables)?;
-		let var1 = var_exists(ctx.arguments.get(1).unwrap(), variables)?;
-		let var2 = var_exists(ctx.arguments.get(2).unwrap(), variables)?;
+        let dest_name = ctx.arguments.get(0).unwrap();
+        let _ = var_exists(dest_name, variables)?;
+        let var1 = var_exists(ctx.arguments.get(1).unwrap(), variables)?;
+        let var2 = var_exists(ctx.arguments.get(2).unwrap(), variables)?;
 
-		if let (Variable::Number(n1), Variable::Number(n2)) = (var1, var2) {
-			variables.insert(dest_name.to_string(), Variable::Boolean(n1 == n2));
-			return Ok(())
-		}
+        if let (Variable::Number(n1), Variable::Number(n2)) = (var1, var2) {
+            variables.insert(dest_name.to_string(), Variable::Boolean(*n1 == *n2));
+            return Ok(());
+        }
 
-		if let (Variable::String(n1), Variable::String(n2)) = (var1, var2) {
-			variables.insert(dest_name.to_string(), Variable::Boolean(n1 == n2));
-			return Ok(())
-		}
+        if let (Variable::Boolean(n1), Variable::Boolean(n2)) = (var1, var2) {
 
-		if let (Variable::Boolean(n1), Variable::Boolean(n2)) = (var1, var2) {
-			variables.insert(dest_name.to_string(), Variable::Boolean(n1 == n2));
-			return Ok(())
-		}
+            variables.insert(dest_name.to_string(), Variable::Boolean(*n1 == *n2));
+            return Ok(());
+        }
 
-		Ok(())
-	}
+        if let (Variable::String(n1), Variable::String(n2)) = (var1, var2) {
 
-	pub fn mov(
-		ctx: &Line,
+            variables.insert(dest_name.to_string(), Variable::Boolean(*n1 == *n2));
+            return Ok(());
+        }
+
+        Ok(())
+    }
+
+    pub fn mov(
+        ctx: &Line,
         variables: &mut VarMapping,
         _loaded_variables: &mut LoadedVars,
         _function_context: &FunctionContext,
-		_functions: &GlobalFunctions
-	) -> CommandRet {
-		if ctx.arguments.len() != 2 {
-			return Err(CompilerError::new(
+        _functions: &GlobalFunctions,
+    ) -> CommandRet {
+        if ctx.arguments.len() != 2 {
+            return Err(CompilerError::new(
                 format!(
                     "Invalid 'MOV' on line {}\r\n\tSyntax --\r\n\tMOV $VarName1, $VarName2",
                     ctx.number
                 )
                 .to_string(),
             ));
-		}
+        }
 
-		let var1_name = ctx.arguments.get(0).unwrap();
+        let var1_name = ctx.arguments.get(0).unwrap();
 
-		let _ = var_exists(var1_name, variables).unwrap();
+        let _ = var_exists(var1_name, variables).unwrap();
 
-		let var2 = var_exists(ctx.arguments.get(1).unwrap(), variables).unwrap();
-		
-		variables.insert(var1_name.to_string(), var2.to_owned());
-		
-		Ok(())
-	}
+        let var2 = var_exists(ctx.arguments.get(1).unwrap(), variables).unwrap();
+
+        variables.insert(var1_name.to_string(), var2.to_owned());
+
+        Ok(())
+    }
 
     pub fn jmp(
         ctx: &Line,
         variables: &mut VarMapping,
         loaded_variables: &mut LoadedVars,
         _function_context: &FunctionContext,
-		functions: &GlobalFunctions
+        functions: &GlobalFunctions,
     ) -> CommandRet {
         if ctx.arguments.len() != 1 {
             return Err(CompilerError::new(
@@ -534,14 +643,14 @@ mod commands {
             ));
         }
 
-		let _ = execute_function(&ctx.arguments[0], functions, variables, loaded_variables)?;
+        let _ = execute_function(&ctx.arguments[0], functions, variables, loaded_variables)?;
 
         Ok(())
     }
 }
 
 mod built_in_functions {
-    use super::{command_types::LoadedVars, Variable, CompilerError};
+    use super::{command_types::LoadedVars, CompilerError, Variable};
 
     pub fn print(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
         let mut string_buf = String::new();
@@ -557,9 +666,8 @@ mod built_in_functions {
     }
 
     pub fn println(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
-        print(loaded_variables);
+        print(loaded_variables)?;
         println!();
-
         Ok(None)
     }
 
@@ -580,8 +688,9 @@ mod built_in_functions {
             )));
         }
 
-        if let (Some(Variable::String(as_str)), Some(Variable::Number(index))) = (loaded_variables.get(0), loaded_variables.get(1)) {
-            
+        if let (Some(Variable::String(as_str)), Some(Variable::Number(index))) =
+            (loaded_variables.get(0), loaded_variables.get(1))
+        {
             if let Some(result) = as_str.chars().nth(*index as usize) {
                 Ok(Some(Variable::String(result.to_string())))
             } else {
@@ -590,7 +699,6 @@ mod built_in_functions {
                     index
                 )))
             }
-
         } else {
             Err(CompilerError::new(format!(
                 "Invalid function call\r\n\tExpected two loaded variables (<str>, <num>)\r\n\tFound mismatched types",
@@ -760,7 +868,7 @@ pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Er
     for line in lines {
         if line.starts_with('~') && line.len() >= 2 {
             if let Some(init_fn_name) = init_fn_name {
-				result.sort_by(|a: &Line, b: &Line| a.number.cmp(&b.number));
+                result.sort_by(|a: &Line, b: &Line| a.number.cmp(&b.number));
                 functions.insert(init_fn_name, result);
                 result = Vec::new();
             }
@@ -769,9 +877,9 @@ pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Er
             continue;
         }
 
-		if line.len() == 0 {
-			continue;
-		}
+        if line.len() == 0 {
+            continue;
+        }
 
         let tokens = split_string(&line.to_string())?;
 
@@ -782,14 +890,14 @@ pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Er
             Ok(n) => n,
             Err(_) => {
                 return Err(Box::new(CompilerError::new(
-                    format!("Not a line number: ({})", line_num).to_owned(),
+                    format!("Not a line number: {}", line_num).to_owned(),
                 )))
             }
         };
 
         if line_numbers.contains(&line_num_u32) {
             return Err(Box::new(CompilerError::new(
-                format!("Line number {} declared more than once.", line_num_u32).to_owned(),
+                format!("Line number {} declared more than once", line_num_u32).to_owned(),
             )));
         } else {
             line_numbers.insert(line_num_u32);
@@ -797,13 +905,18 @@ pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Er
 
         let command = next_token(&mut tokens)?;
 
+        if !COMMAND_MAP.contains_key(&command) {
+            return Err(Box::new(CompilerError::new(
+                format!("Unknown command on line {}: {}", line_num_u32, command).to_owned(),
+            )));
+        }
+
         let mut arguments = Vec::new();
         for argument in tokens {
             let mut argument = argument.to_string();
             if let Some(',') = argument.chars().next_back() {
                 argument.pop();
             }
-
             arguments.push(argument);
         }
 
