@@ -1,5 +1,5 @@
 ~.Data
-0000 SET $number, 10
+0000 SET $number, 6
 0010 SET $result, -1
 0020 SET $str_1, "The factorial of"
 0030 SET $str_2, "is"
@@ -8,7 +8,7 @@
 0100 JMP .Data
 0110 JMP CalculateFactorial
 0120 LOAD $str_1, $number, $str_2, $result
-0130 CALL Print
+0130 SYSCALL Print
 0140 POPALL
 0150 DROPALL
 
@@ -22,7 +22,7 @@
 1060 JMP CalculateFactorial<init>
 
 ~CalculateFactorial<init>
-1100 CMP $__CalculateFactorial.done, $__CalculateFactorial.iter, $__CalculateFactorial.number
+1100 EQU $__CalculateFactorial.done, $__CalculateFactorial.iter, $__CalculateFactorial.number
 1110 IF $__CalculateFactorial.done, CalculateFactorial<init:loop_end>, CalculateFactorial<init:loop_cont>
 
 ~CalculateFactorial<init:loop_cont>
