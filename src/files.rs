@@ -276,6 +276,7 @@ mod commands {
             "PrintLn" => built_in_functions::println,
             "StrCat" => built_in_functions::str_cat,
             "CharAt" => built_in_functions::char_at,
+            "StrLen" => built_in_functions::str_len,
             _ => {
                 return Err(CompilerError::new(format!(
                     "{} is not a native function.",
@@ -416,7 +417,7 @@ mod commands {
     arithmetic!(pow, (|n1: f32, n2| n1.powf(n2)));
     arithmetic!(r#mod, (|n1, n2| n1 % n2));
     arithmetic!(sqrt, (|n1, n2| (n1 as f32).powf(1.0 / n2)));
-  
+
     pub fn drop(
         ctx: &Line,
         variables: &mut VarMapping,
@@ -429,12 +430,13 @@ mod commands {
                 "Invalid 'DROP' on line {}\r\n\tSyntax --\r\n\tDROP $VarName",
                 ctx.number
             )));
-        } else if variables.remove(ctx.arguments.get(0).unwrap()).is_none() {
-            return Err(CompilerError::new(
-                format!("Variable {} is not loaded.", ctx.arguments.get(0).unwrap()).to_string(),
-            ));
         }
-        Ok(())
+        match variables.remove(ctx.arguments.get(0).unwrap()) {
+            Some(_) => Ok(()),
+            None => Err(CompilerError::new(
+                format!("Variable {} is not loaded.", ctx.arguments.get(0).unwrap()).to_string(),
+            )),
+        }
     }
 
     macro_rules! bool_comparisons {
@@ -600,11 +602,11 @@ mod commands {
         } else {
           Err(CompilerError::new(format!("Invalid data types on line {}: Expected <number, number>", ctx.number)))
         }
-    }         
+    }
       };
     }
 
-  macro_rules! equality {
+    macro_rules! equality {
     ($name:ident, $op:tt) => {
       pub fn $name(
         ctx: &Line,
@@ -653,14 +655,14 @@ mod commands {
     };
   }
 
-  equality!(equ, ==);
-  equality!(neq, !=);
-  
-  comparison!(gt, >);
-  comparison!(lt, <);
-  comparison!(gte, >=);
-  comparison!(lte, <=);
-  
+    equality!(equ, ==);
+    equality!(neq, !=);
+
+    comparison!(gt, >);
+    comparison!(lt, <);
+    comparison!(gte, >=);
+    comparison!(lte, <=);
+
     pub fn mov(
         ctx: &Line,
         variables: &mut VarMapping,
@@ -746,6 +748,69 @@ mod built_in_functions {
         Ok(Some(Variable::String(result)))
     }
 
+    fn num_len(n: f32) -> usize {
+        if n < 100000f32 {
+            // 5 or less
+            if n < 100f32 {
+                // 1 or 2
+                if n < 10f32 {
+                    return 1;
+                }
+                return 2;
+            } else {
+                // 3 or 4 or 5
+                if n < 1000f32 {
+                    return 3;
+                } else {
+                    // 4 or 5
+                    if n < 10000f32 {
+                        return 4;
+                    }
+                    return 5;
+                }
+            }
+        } else {
+            // 6 or more
+            if n < 10000000f32 {
+                // 6 or 7
+                if n < 1000000f32 {
+                    return 6;
+                }
+                return 7;
+            } else {
+                // 8 to 10
+                if n < 100000000f32 {
+                    return 8;
+                }
+                // 9 or 10
+                if n < 1000000000f32 {
+                    return 9;
+                }
+                return 10;
+            }
+        }
+    }
+
+    pub fn str_len(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
+        if let Some(name) = loaded_variables.get(0) {
+            match name {
+                Variable::String(str) => Ok(Some(Variable::Number(str.len() as f32))),
+                Variable::Number(num) => Ok(Some(Variable::Number(num_len(*num) as f32))),
+                Variable::Boolean(b) => Ok(Some(Variable::Number({
+                    if *b {
+                        4f32
+                    } else {
+                        5f32
+                    }
+                }))),
+            }
+        } else {
+            Err(CompilerError::new(format!(
+                "Invalid function call\r\n\tExpected one loaded variable (<str>)"
+            )))
+        }
+    }
+
     pub fn char_at(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
         if loaded_variables.len() != 2 {
             return Err(CompilerError::new(format!(
@@ -790,19 +855,19 @@ pub fn execute_function(
                 }
             };
 
-            let result = callable(
+            callable(
                 &line,
                 variable_mapping,
                 loaded_variables,
                 &(name.to_string(), lines),
                 functions,
-            );
+            )?;
 
-            if result.is_err() {
-                return Err(CompilerError::new(
-                    format!("Error: {:?}", result.err().unwrap()).to_string(),
-                ));
-            }
+            // if result.is_err() {
+            //     return Err(CompilerError::new(
+            //         format!("Error: {:?}", result.err().unwrap()).to_string(),
+            //     ));
+            // }
         }
     }
 
@@ -825,7 +890,7 @@ pub fn traverse_lines(
         functions,
         variable_mapping,
         loaded_variables,
-    );
+    )?;
 
     Ok(())
 }
@@ -918,7 +983,6 @@ pub fn split_string(string: &String) -> Result<Vec<String>, String> {
         if buf.len() > 0 {
             result.push(buf.to_string());
         }
-        drop(buf);
         Ok(result)
     }
 }

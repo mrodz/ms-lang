@@ -1,0 +1,8 @@
+~Main
+0 REM >> This program will print hello world!
+1 SET $message, "Hello World"
+2 LOAD $message
+3 SYSCALL Print
+4 REM >> By now, the message has been printed. Let's clean up!
+4 POPALL
+5 DROP $message

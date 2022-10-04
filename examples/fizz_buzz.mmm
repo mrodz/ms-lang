@@ -1,0 +1,76 @@
+~nop
+~.Data
+000000 SET $number, 36
+000010 SET $no_rem, 0
+000020 SET $fizz, "Fizz"
+000030 SET $buzz, "Buzz"
+000040 SET $arrow, "->"
+000050 SET $done_str, "Done!"
+
+~Main
+001000 JMP .Data
+001010 JMP FizzBuzz
+001020 LOAD $done_str
+001030 SYSCALLRM PrintLn
+001040 DROPALL
+
+~FizzBuzz
+500000 SET $iter, 1
+500010 SET $done, false
+500040 JMP FizzBuzz::LOOPING
+
+~FizzBuzz::LOOPING
+501010 SET $fizz_buzz_result, ""
+501020 JMP FizzBuzzForNumber
+501030 LOAD $iter, $arrow, $fizz_buzz_result
+501040 SYSCALLRM PrintLn
+501050 GTE $done, $iter, $number
+501060 IF $done, nop, FizzBuzz::LOOPING::CONT
+
+~FizzBuzz::LOOPING::CONT
+502000 ADD $iter, 1
+502010 JMP FizzBuzz::LOOPING
+
+~FizzBuzzForNumber
+100000 SET $mod_by_3, -1
+100010 MOV $mod_by_3, $iter
+100020 MOD $mod_by_3, 3
+100030 SET $is_mod_3, false
+100040 EQU $is_mod_3, $mod_by_3, $no_rem
+100050 DROP $mod_by_3
+100060 SET $buffer, ""
+100070 SET $writes, 0
+100080 IF $is_mod_3, FizzBuzzForNumber::IF_$is_mod_3, nop
+100090 SET $mod_by_5, -1
+100100 MOV $mod_by_5, $iter
+100110 MOD $mod_by_5, 5
+100120 SET $is_mod_5, false
+100130 EQU $is_mod_5, $mod_by_5, $no_rem
+100140 DROP $mod_by_5
+100150 IF $is_mod_5, FizzBuzzForNumber::IF_$is_mod_5, nop
+100160 SET $buf_len, -1
+100170 LOAD $buffer
+100180 SYSCALLRM StrLen, $buf_len
+100190 SET $has_writes, false
+100200 EQU $has_writes, $writes, $no_rem
+100210 IF $has_writes, FizzBuzzForNumber::IF_$has_writes, nop
+100220 DROP $has_writes
+100230 DROP $is_mod_5
+100240 DROP $is_mod_3
+100250 DROP $buf_len
+100260 DROP $writes
+100270 MOV $fizz_buzz_result, $buffer
+
+~FizzBuzzForNumber::IF_$is_mod_3
+200000 LOAD $fizz
+200010 SYSCALLRM StrCat, $buffer
+200020 ADD $writes, 1
+
+~FizzBuzzForNumber::IF_$is_mod_5
+300000 LOAD $buffer, $buzz
+300010 SYSCALLRM StrCat, $buffer
+300020 ADD $writes, 1
+
+~FizzBuzzForNumber::IF_$has_writes
+400000 LOAD $iter
+400010 SYSCALLRM StrCat, $buffer
