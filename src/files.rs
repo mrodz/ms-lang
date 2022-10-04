@@ -438,7 +438,7 @@ mod commands {
     }
 
     macro_rules! bool_comparisons {
-        ($name:ident, $func:tt) => {
+        ($name:ident, $op:tt) => {
             pub fn $name(
                 ctx: &Line,
                 variables: &mut VarMapping,
@@ -453,7 +453,7 @@ mod commands {
                             let one = *var1;
                             let two = *var2;
 
-                            variables.insert(first.to_string(), Variable::Boolean($func(one, two)));
+                            variables.insert(first.to_string(), Variable::Boolean(one $op two));
                             Ok(())
                         } else {
                             Err(CompilerError::new(format!(
@@ -478,9 +478,9 @@ mod commands {
         };
     }
 
-    bool_comparisons!(and, (|a, b| a && b));
-    bool_comparisons!(or, (|a, b| a || b));
-    bool_comparisons!(xor, (|a, b| a ^ b));
+    bool_comparisons!(and, &&);
+    bool_comparisons!(or, ||);
+    bool_comparisons!(xor, ^);
 
     pub fn not(
         ctx: &Line,
@@ -569,7 +569,7 @@ mod commands {
     }
 
     macro_rules! comparison {
-      ($name:ident, |$n1:ident, $n2: ident| $func:expr) => {
+      ($name:ident, $op:tt) => {
      pub fn $name(
         ctx: &Line,
         variables: &mut VarMapping,
@@ -593,8 +593,8 @@ mod commands {
         let var1 = var_exists(ctx.arguments.get(1).unwrap(), variables)?;
         let var2 = var_exists(ctx.arguments.get(2).unwrap(), variables)?;
 
-        if let (Variable::Number($n1), Variable::Number($n2)) = (var1, var2) {
-          let res: bool = $func;
+        if let (Variable::Number(n1), Variable::Number(n2)) = (var1, var2) {
+          let res: bool = *n1 $op *n2;
             variables.insert(dest_name.to_string(), Variable::Boolean(res));
             Ok(())
         } else {
@@ -604,9 +604,6 @@ mod commands {
       };
     }
 
-  
-  // comparison!(equ, |n1, n2| { *n1 == *n2 });
-  // comparison!(neq, |n1, n2| { *n1 != *n2 });
   macro_rules! equality {
     ($name:ident, $op:tt) => {
       pub fn $name(
@@ -659,10 +656,10 @@ mod commands {
   equality!(equ, ==);
   equality!(neq, !=);
   
-  comparison!(gt, |n1, n2| { *n1 > *n2 });
-  comparison!(lt, |n1, n2| { *n1 < *n2 });
-  comparison!(gte, |n1, n2| { *n1 >= *n2 });
-  comparison!(lte, |n1, n2| { *n1 <= *n2 });
+  comparison!(gt, >);
+  comparison!(lt, <);
+  comparison!(gte, >=);
+  comparison!(lte, <=);
   
     pub fn mov(
         ctx: &Line,
