@@ -6,13 +6,18 @@
 000030 SET $buzz, "Buzz"
 000040 SET $arrow, "->"
 000050 SET $done_str, "Done!"
+000060 SET $prompt, "Enter a number:"
 
 ~Main
 001000 JMP .Data
-001010 JMP FizzBuzz
-001020 LOAD $done_str
-001030 SYSCALLRM PrintLn
-001040 DROPALL
+001010 LOAD $prompt
+001020 SYSCALLRM Print
+001030 SYSCALL Input, $number
+001040 CAST_N $number
+001050 JMP FizzBuzz
+001060 LOAD $done_str
+001070 SYSCALLRM PrintLn
+001080 DROPALL
 
 ~FizzBuzz
 500000 SET $iter, 1

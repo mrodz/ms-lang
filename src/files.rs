@@ -116,6 +116,8 @@ lazy_static! {
         insert_command!(GT, gt);
         insert_command!(LTE, lte);
         insert_command!(GTE, gte);
+        insert_command!(CAST_N, cast_number);
+        // insert_command!(CAST, cast);
 
         command_map
     };
@@ -186,6 +188,83 @@ mod commands {
             ))),
         }
     }
+
+    pub fn cast_number(
+        ctx: &Line,
+        variables: &mut VarMapping,
+        _loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions,
+    ) -> CommandRet {
+        if let Some(name) = ctx.arguments.get(0) {
+            if let Some(var) = variables.get(name) {
+                let result = match var {
+                    Variable::Boolean(b) => Variable::Number(if *b { 1f32 } else { 0f32 }),
+                    Variable::String(s) => {
+                        let maybe_var = var_from_str(s.to_string());
+                        if let Variable::Number(_) = maybe_var {
+                            maybe_var
+                        } else {
+                            return Err(CompilerError::new(format!(
+                    "Invalid 'CAST_N' on line {}\r\n\tVariable cannot be cast to a number\r\n\tFound {}",
+                    ctx.number, name
+                )));
+                        }
+                    }
+                    Variable::Number(n) => Variable::Number(*n),
+                };
+
+                variables.insert(name.to_string(), result);
+
+                Ok(())
+            } else {
+                Err(CompilerError::new(format!(
+                    "Variable '{}' has not been declared, but it is referenced on line {}",
+                    name, ctx.number
+                )))
+            }
+        } else {
+            Err(CompilerError::new(format!(
+                "Invalid 'CAST_N' on line {}\r\n\tSyntax --\r\n\tCAST_N $VarName, type",
+                ctx.number
+            )))
+        }
+    }
+
+    // fn num_to_str(d: Variable) -> Result<Variable, ()> {
+    //     if let Variable::Number(n) = d{
+    //       return Ok(Variable::String(d.to_string()));
+    //     }
+    //   Err(())
+    // }
+
+    // pub fn cast(
+    //     ctx: &Line,
+    //     variables: &mut VarMapping,
+    //     _: &mut LoadedVars,
+    //     _function_context: &FunctionContext,
+    //     _functions: &GlobalFunctions,
+    // ) -> CommandRet {
+    //     if let (Some(name), Some(r#type)) = (ctx.arguments.get(0), ctx.arguments.get(1)) {
+    //         if let Some(var) = variables.get(name) {
+    //             // let new_var = match r#type {
+    //             //   "str" => Variable::String(),
+    //             //   "number" => Variable::Number,
+
+    //             // }
+    //         } else {
+    //             Err(CompilerError::new(format!(
+    //                 "Variable '{}' has not been declared, but it is referenced on line {}",
+    //                 name, ctx.number
+    //             )))
+    //         }
+    //     } else {
+    //         Err(CompilerError::new(format!(
+    //             "Invalid 'CAST' on line {}\r\n\tSyntax --\r\n\tCAST $VarName, type",
+    //             ctx.number
+    //         )))
+    //     }
+    // }
 
     pub fn set(
         ctx: &Line,
@@ -277,6 +356,7 @@ mod commands {
             "StrCat" => built_in_functions::str_cat,
             "CharAt" => built_in_functions::char_at,
             "StrLen" => built_in_functions::str_len,
+            "Input" => built_in_functions::input,
             _ => {
                 return Err(CompilerError::new(format!(
                     "{} is not a native function.",
@@ -718,6 +798,26 @@ mod commands {
 
 mod built_in_functions {
     use super::{command_types::LoadedVars, CompilerError, Variable};
+
+    pub fn input(_loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
+        use std::io::{stdin, stdout, Write};
+
+        let _ = stdout().flush();
+
+        let mut result = String::new();
+
+        stdin().read_line(&mut result).expect("a string");
+
+        if let Some('\n') = result.chars().next_back() {
+            result.pop();
+        }
+
+        if let Some('\r') = result.chars().next_back() {
+            result.pop();
+        }
+
+        Ok(Some(Variable::String(result)))
+    }
 
     pub fn print(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
         let mut string_buf = String::new();
