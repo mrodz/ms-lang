@@ -116,8 +116,7 @@ lazy_static! {
         insert_command!(GT, gt);
         insert_command!(LTE, lte);
         insert_command!(GTE, gte);
-        insert_command!(CAST_N, cast_number);
-        // insert_command!(CAST, cast);
+        insert_command!(CAST_NUMBER, cast_number);
 
         command_map
     };

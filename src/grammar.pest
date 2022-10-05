@@ -1,0 +1,3 @@
+valid_ident = { ASCII_ALPHA }
+maybe_newline = { ("\r\n" | "\n"){,1} }
+file = { SOI ~ (valid_ident ~ maybe_newline)* ~ EOI }
