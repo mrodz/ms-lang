@@ -980,12 +980,12 @@ pub fn traverse_lines(
     variable_mapping: &mut HashMap<String, Variable>,
     loaded_variables: &mut Vec<Variable>,
 ) -> Result<(), CompilerError> {
-    if !lines.contains_key("Main") {
-        return Err(CompilerError::new("No Main function found.".into()));
+    if !lines.contains_key("main") {
+        return Err(CompilerError::new("No main function found.".into()));
     }
 
     let _ = execute_function(
-        &"Main".to_string(),
+        &"main".to_string(),
         functions,
         variable_mapping,
         loaded_variables,

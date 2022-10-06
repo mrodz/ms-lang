@@ -1,1 +1,8 @@
-aaa
+~main
+10040 JMP __GLOBALS__
+10050 REM
+
+~__GLOBALS__
+10 SET $hello_1736329398, 5
+20 SET $goodbye_1017885826, true
+30 SET $greeting_247540000, "hello world"

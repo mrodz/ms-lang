@@ -1,3 +1,47 @@
-valid_ident = { ASCII_ALPHA }
-maybe_newline = { ("\r\n" | "\n"){,1} }
-file = { SOI ~ (valid_ident ~ maybe_newline)* ~ EOI }
+alpha = { 'a'..'z' | 'A'..'Z' }
+digit = { '0'..'9' }
+underscore = { "_" }
+
+WHITESPACE = _{ " " }
+COMMENT = _{ "//" }
+
+// idents = { ident ~ (NEWLINE? ~ "," ~ ident)* }
+ident = @{ !digit ~ (alpha | digit | underscore)+ }
+
+string_literal_inner_d = { ((!"\"") ~ ANY)* }
+string_literal_double = @{ "\"" ~ string_literal_inner_d ~ "\"" }
+string_literal_inner_s = { ((!"'") ~ ANY)* }
+string_literal_single = @{ "'" ~ string_literal_inner_s ~ "'" }
+
+function_call = { ident ~ "(" ~ (function_arg) ~ ("," ~ function_arg)* ~ ")" }
+function_arg = { val | ident }
+
+function_arguments = { (ident ~ ("," ~ ident)*)? }
+
+function = { "func" ~ ident ~ "(" ~ function_arguments ~ ")" ~ "{" ~ function_body ~ "}"}
+
+function_body = {
+	((tabs ~ (statement)? ~ NEWLINE)*)
+}
+
+statement = { tabs ~ (variable | function) }
+
+b_true = { "true" }
+b_false = { "false" }
+boolean = { b_true | b_false }
+
+number = { ASCII_DIGIT{1,} }
+
+val = { number | boolean | (string_literal_double | string_literal_single) | function_call }
+
+variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
+
+declarations = { variable | function }
+
+tabs = _{ ("\t"*) }
+
+file = {
+    SOI ~
+    ((tabs ~ (declarations)? ~ NEWLINE)*) ~
+    EOI
+}
