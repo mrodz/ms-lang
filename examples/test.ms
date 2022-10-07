@@ -1,7 +1,3 @@
-var hello=5;
-var goodbye=true;
-var greeting="hello world";
-
 func main() {
-	var a=1;
+  var a = 1 + 2 + 3;
 }

@@ -1077,7 +1077,7 @@ pub fn split_string(string: &String) -> Result<Vec<String>, String> {
     }
 
     if in_quotes {
-        Err("Found EOL while parsing string".to_string())
+        Err(("Found EOL while parsing string: ".to_owned() + string).to_string())
     } else {
         if buf.len() > 0 {
             result.push(buf.to_string());
@@ -1088,12 +1088,14 @@ pub fn split_string(string: &String) -> Result<Vec<String>, String> {
 
 pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Error>> {
     let mut result = Vec::new();
-    let mut line_numbers = HashSet::<u32>::new();
+    let mut line_n = 0;
+    // let mut line_numbers = HashSet::<u32>::new();
 
     let mut init_fn_name: Option<String> = None;
     let mut functions = HashMap::new();
 
     for line in lines {
+        line_n += 1;
         if line.starts_with('~') && line.len() >= 2 {
             if let Some(init_fn_name) = init_fn_name {
                 result.sort_by(|a: &Line, b: &Line| a.number.cmp(&b.number));
@@ -1113,29 +1115,11 @@ pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Er
 
         let mut tokens = tokens.into_iter();
 
-        let line_num = next_token(&mut tokens)?;
-        let line_num_u32 = match u32::from_str(line_num.as_str()) {
-            Ok(n) => n,
-            Err(_) => {
-                return Err(Box::new(CompilerError::new(
-                    format!("Not a line number: {}", line_num).to_owned(),
-                )))
-            }
-        };
-
-        if line_numbers.contains(&line_num_u32) {
-            return Err(Box::new(CompilerError::new(
-                format!("Line number {} declared more than once", line_num_u32).to_owned(),
-            )));
-        } else {
-            line_numbers.insert(line_num_u32);
-        }
-
         let command = next_token(&mut tokens)?;
 
         if !COMMAND_MAP.contains_key(&command) {
             return Err(Box::new(CompilerError::new(
-                format!("Unknown command on line {}: {}", line_num_u32, command).to_owned(),
+                format!("Unknown command on line {}: {}", line_n, command).to_owned(),
             )));
         }
 
@@ -1149,7 +1133,7 @@ pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Er
         }
 
         result.push(Line {
-            number: line_num_u32,
+            number: line_n - 1,
             command: command.to_string(),
             arguments: arguments,
         })

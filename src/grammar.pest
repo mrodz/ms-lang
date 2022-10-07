@@ -32,7 +32,19 @@ boolean = { b_true | b_false }
 
 number = { ASCII_DIGIT{1,} }
 
-val = { number | boolean | (string_literal_double | string_literal_single) | function_call }
+addition = { "+" }
+subtraction = { "-" }
+multiplication = { "*" }
+division = { "/" }
+modulo = { "%" }
+
+math_op = { addition | subtraction | multiplication | division | modulo }
+
+operation = { math_op ~ number }
+
+math = { number ~ operation* }
+
+val = { math | boolean | (string_literal_double | string_literal_single) | function_call | ident }
 
 variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
 
