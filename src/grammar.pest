@@ -5,7 +5,7 @@ underscore = { "_" }
 WHITESPACE = _{ " " }
 COMMENT = _{ "//" }
 
-// idents = { ident ~ (NEWLINE? ~ "," ~ ident)* }
+
 ident = @{ !digit ~ (alpha | digit | underscore)+ }
 
 string_literal_inner_d = { ((!"\"") ~ ANY)* }
@@ -30,21 +30,28 @@ b_true = { "true" }
 b_false = { "false" }
 boolean = { b_true | b_false }
 
-number = { ASCII_DIGIT{1,} }
+number = { ASCII_DIGIT{1,} ~ ("." ~ ASCII_DIGIT{1,})? }
 
-addition = { "+" }
-subtraction = { "-" }
-multiplication = { "*" }
-division = { "/" }
-modulo = { "%" }
+// addition = { "+" }
+// subtraction = { "-" }
+// multiplication = { "*" }
+// division = { "/" }
+// modulo = { "%" }
 
-math_op = { addition | subtraction | multiplication | division | modulo }
+// math_op = { addition | subtraction | multiplication | division | modulo }
 
-operation = { math_op ~ number }
+// operation = { math_op ~ number }
 
-math = { number ~ operation* }
+// res_math = { (number | res_math) ~ math_op ~ (number | res_math) }
+// math = { number | (res_math)* }
 
-val = { math | boolean | (string_literal_double | string_literal_single) | function_call | ident }
+group   =  { prefix* ~ primary ~ (infix ~ prefix* ~ primary )* }
+infix   =  { "+" | "-" | "*" | "/" | "%" }
+prefix  =  { "-" | "!" }
+primary = _{ number | "(" ~ group ~ ")" }
+  // num   = @{ (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ | ASCII_DIGIT) }
+
+val = { primary | boolean | (string_literal_double | string_literal_single) | function_call | ident }
 
 variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
 
