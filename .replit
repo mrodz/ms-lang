@@ -1,4 +1,4 @@
-run = "cargo run"
+run = "cargo run -- c r"
 hidden = ["target"]
 
 [packager]

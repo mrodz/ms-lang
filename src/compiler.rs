@@ -256,10 +256,74 @@ impl Parser {
             // }
             Rule::group => {
                 let tt = parse(x.as_str());
-                println!("{:#?}", tt);
+
+                let mut res = Vec::<String>::new();
+              
+                fn f(res: &mut Vec<String>, bin_op: crate::math::Expr) -> () {
+                  use crate::math::{Expr, BinOpKind};
+
+                  let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
+
+                  match bin_op {
+                      Expr::BinOp(first, op, second) => {
+                        let cmd = match op {
+                          BinOpKind::Add => "ADD",
+                          BinOpKind::Sub => "SUB",
+                          BinOpKind::Mul => "MULT",
+                          BinOpKind::Mod => "MOD",
+                          BinOpKind::Div => "DIV"
+                        };
+
+                        res.push(format!("SET {first_op}, 0"));
+                        f(res, *first);
+                        res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
+
+                        let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
+
+                        res.push(format!("SET {second_op}, 0"));
+                        f(res, *second);
+
+                        res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
+
+                        res.push(format!("MOV $__MATH_RESULT__, {first_op}"));
+
+                        res.push(format!("{cmd} $__MATH_RESULT__, {second_op}"));
+
+                        res.push(format!("DROP {first_op}\r\nDROP {second_op}"));
+                      }
+                      Expr::UnOp(kind, expr) => {
+                        unimplemented!()
+                      }
+                      Expr::Number(n) => {
+                        res.push(format!("SET {first_op}, {n}\r\nMOV $__MATH_RESULT__, {first_op}\r\nDROP {first_op}"));         
+                      }
+                      Expr::Variable(name) => {
+                        res.push(format!("MOV $__MATH_RESULT__, {}", VARIABLE_MAPPING.lock().unwrap().get(&name).unwrap()));
+                      }
+                  }
+                    
+                  // for i in bin_op {
+                  //   println!("{:?}", i);
+                  // }
+                    // println!("{:?}", bin_op)
+                   //  match bin_op {
+                     
+                   // }
+                }
+              
+                // println!("{:#?}", tt);
+                // println!("")
+                f(&mut res, tt);
                 // x.primary()
-                
-                "".into()
+                res.push(format!("SET {new_name}, 0\r\nMOV {new_name}, $__MATH_RESULT__"));
+              
+                let mut buf = String::new();
+
+                for line in res {
+                    buf.push_str(&(line.to_owned() + "\r\n"))
+                }
+
+                buf
             }
             _ => panic!("undefined: {:?}", rule),
         };

@@ -48,7 +48,7 @@ number = { ASCII_DIGIT{1,} ~ ("." ~ ASCII_DIGIT{1,})? }
 group   =  { prefix* ~ primary ~ (infix ~ prefix* ~ primary )* }
 infix   =  { "+" | "-" | "*" | "/" | "%" }
 prefix  =  { "-" | "!" }
-primary = _{ number | "(" ~ group ~ ")" }
+primary = _{ (number | ident) | "(" ~ group ~ ")" }
   // num   = @{ (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ | ASCII_DIGIT) }
 
 val = { primary | boolean | (string_literal_double | string_literal_single) | function_call | ident }

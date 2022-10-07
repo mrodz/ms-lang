@@ -1,8 +1,7 @@
 /// Huge thanks to @segeljakt
 /// https://github.com/segeljakt/pratt
-/// 
+///
 /// His solution to parsing PEMDAS is wonderful.
-
 use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
@@ -18,6 +17,7 @@ pub enum Expr {
     BinOp(Box<Expr>, BinOpKind, Box<Expr>),
     UnOp(UnOpKind, Box<Expr>),
     Number(f32),
+    Variable(String)
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -26,15 +26,14 @@ pub enum BinOpKind {
     Sub,
     Mul,
     Div,
-    Pow,
-    Eq,
+    Mod,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum UnOpKind {
-    Not,
+    // Not,
     Neg,
-    Try,
+    // Try,
 }
 
 struct ExprParser;
@@ -49,27 +48,33 @@ where
 
     // Query information about an operator (Affix, Precedence, Associativity)
     fn query(&mut self, tree: &Self::Input) -> Result<Affix> {
-        let affix = match (tree.as_rule(), tree.as_str()) {
+        let rule = tree.as_rule();
+        println!("rule = {:?}", rule);
+        let affix = match (rule, tree.as_str()) {
             (Rule::infix, "=") => Affix::Infix(Precedence(2), Associativity::Neither),
             (Rule::infix, "+") => Affix::Infix(Precedence(3), Associativity::Left),
             (Rule::infix, "-") => Affix::Infix(Precedence(3), Associativity::Left),
             (Rule::infix, "*") => Affix::Infix(Precedence(4), Associativity::Left),
             (Rule::infix, "/") => Affix::Infix(Precedence(4), Associativity::Left),
+            (Rule::infix, "%") => Affix::Infix(Precedence(4), Associativity::Left),
             // (Rule::postfix, "?") => Affix::Postfix(Precedence(5)),
             (Rule::prefix, "-") => Affix::Prefix(Precedence(6)),
             (Rule::prefix, "!") => Affix::Prefix(Precedence(6)),
-            (Rule::infix, "^") => Affix::Infix(Precedence(7), Associativity::Right),
+            // (Rule::infix, "^") => Affix::Infix(Precedence(7), Associativity::Right),
             (Rule::group, _) => Affix::Nilfix,
             (Rule::primary, _) => Affix::Nilfix,
-            (Rule::number, _) => Affix::Nilfix,
-            _ => unreachable!(),
+            (Rule::number, _) 
+            | (Rule::ident, _) => Affix::Nilfix,
+            // (Rule::ident, _) => Affix::Nilfix
+            _ => unreachable!("no rule implemented for {:?}", rule),
         };
         Ok(affix)
     }
 
     // Construct a primary expression, e.g. a number
     fn primary(&mut self, tree: Self::Input) -> Result<Expr> {
-        let expr = match tree.as_rule() {
+        let rule = tree.as_rule();
+        let expr = match rule {
             Rule::number => {
                 let str = tree.as_str().trim();
                 println!("\t\t@ `{}`", str);
@@ -77,8 +82,12 @@ where
                 let str_f32 = str.parse().unwrap();
                 Expr::Number(str_f32)
             }
+            Rule::ident => {
+                let str = tree.as_str().trim();
+                Expr::Variable(str.to_string())
+            }
             Rule::group => self.parse(&mut tree.into_inner()).unwrap(),
-            _ => unreachable!(),
+            _ => panic!("not implemented: {:?}", rule),
         };
         Ok(expr)
     }
@@ -90,8 +99,8 @@ where
             "-" => BinOpKind::Sub,
             "*" => BinOpKind::Mul,
             "/" => BinOpKind::Div,
-            "^" => BinOpKind::Pow,
-            "=" => BinOpKind::Eq,
+            "%" => BinOpKind::Mod,
+            // "=" => BinOpKind::Eq,
             _ => unreachable!(),
         };
         Ok(Expr::BinOp(Box::new(lhs), op, Box::new(rhs)))
@@ -100,7 +109,7 @@ where
     // Construct a unary prefix expression, e.g. !1
     fn prefix(&mut self, tree: Self::Input, rhs: Expr) -> Result<Expr> {
         let op = match tree.as_str() {
-            "!" => UnOpKind::Not,
+            // "!" => UnOpKind::Not,
             "-" => UnOpKind::Neg,
             _ => unreachable!(),
         };
@@ -109,27 +118,28 @@ where
 
     // Construct a unary postfix expression, e.g. 1?
     fn postfix(&mut self, lhs: Expr, tree: Self::Input) -> Result<Expr> {
-        let op = match tree.as_str() {
-            "?" => UnOpKind::Try,
-            _ => unreachable!(),
-        };
-        Ok(Expr::UnOp(op, Box::new(lhs)))
+        unimplemented!()
+        // let op = match tree.as_str() {
+        //     "?" => UnOpKind::Try,
+        //     _ => unreachable!(),
+        // };
+        // Ok(Expr::UnOp(op, Box::new(lhs)))
     }
 }
 
-fn main() {
-    let mut args = std::env::args();
-    let _ = args.next();
+// fn main() {
+//     let mut args = std::env::args();
+//     let _ = args.next();
 
-    let input = args.next().expect("Expected input string");
-    println!("Code: {}", input);
+//     let input = args.next().expect("Expected input string");
+//     println!("Code: {}", input);
 
-    let tt = TokenTreeParser::parse(Rule::group, &input).unwrap_or_else(|e| panic!("{}", e));
-    println!("TokenTree: {:?}", tt);
+//     let tt = TokenTreeParser::parse(Rule::group, &input).unwrap_or_else(|e| panic!("{}", e));
+//     println!("TokenTree: {:?}", tt);
 
-    let expr = ExprParser.parse(tt.into_iter()).unwrap();
-    println!("Expression: {:?}", expr);
-}
+//     let expr = ExprParser.parse(tt.into_iter()).unwrap();
+//     println!("Expression: {:?}", expr);
+// }
 
 #[cfg(test)]
 mod test {
@@ -214,9 +224,8 @@ pub fn parse(input: &str) -> Expr {
     ExprParser.parse(tt.into_iter()).unwrap()
 }
 
-pub fn bin_op(op: BinOpKind) -> String {
-    let result: Vec<String> = Vec::new();
+// pub fn bin_op(op: BinOpKind) -> String {
+//     let result: Vec<String> = Vec::new();
 
-
-    return "".to_string();
-}
+//     return "".to_string();
+// }
