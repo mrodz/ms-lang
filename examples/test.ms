@@ -3,10 +3,10 @@ var b = 10;
 
 func main() {
   var c = 3;
-  var x = ((a + b) % c);
+  var x = a + b * c;
 
   native "LOAD $x";
   native "SYSCALLRM Print";
 
-  
+
 }

@@ -1,14 +1,13 @@
 use lazy_static::lazy_static;
+use pest::error::ErrorVariant;
 use pest_consume::Error;
 use pest_consume::Parser as ParserDerive;
 use rand::prelude::*;
 use std::collections::HashMap;
-use std::fs::{File};
+use std::fs::File;
 use std::io::prelude::*;
 use std::ops::AddAssign;
 use std::sync::Mutex;
-
-use crate::math::parse;
 
 type Result<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, ()>;
@@ -29,12 +28,10 @@ lazy_static! {
 }
 
 macro_rules! gen_seed {
-  () => {
-    {
+    () => {{
         let mut rng = thread_rng();
         rng.gen::<u32>()
-    }
-  }
+    }};
 }
 
 // #[derive(Debug, Eq, PartialEq)]
@@ -137,11 +134,93 @@ macro_rules! gen_seed {
 //     }
 // }
 
+pub(crate) fn eval_math(math: &str, vars: &HashMap<String, String>, destination: &String) -> Result<String> {
+    let tt = crate::math::parse(math);
+
+    let mut res = Vec::<String>::new();
+
+    fn f(
+        vars: &HashMap<String, String>,
+        res: &mut Vec<String>,
+        bin_op: crate::math::Expr,
+    ) -> () {
+        use crate::math::{BinOpKind, Expr};
+
+        let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
+
+        match bin_op {
+            Expr::BinOp(first, op, second) => {
+                let cmd = match op {
+                    BinOpKind::Add => "ADD",
+                    BinOpKind::Sub => "SUB",
+                    BinOpKind::Mul => "MULT",
+                    BinOpKind::Mod => "MOD",
+                    BinOpKind::Div => "DIV",
+                };
+
+                res.push(format!("SET {first_op}, 0"));
+                f(vars, res, *first);
+                res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
+
+                let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
+
+                res.push(format!("SET {second_op}, 0"));
+                f(vars, res, *second);
+
+                res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
+
+                res.push(format!("MOV $__MATH_RESULT__, {first_op}"));
+
+                res.push(format!("{cmd} $__MATH_RESULT__, {second_op}"));
+
+                res.push(format!("DROP {first_op}\r\nDROP {second_op}"));
+            }
+            Expr::UnOp(kind, expr) => {
+                unimplemented!()
+            }
+            Expr::Number(n) => {
+                res.push(format!("SET {first_op}, {n}\r\nMOV $__MATH_RESULT__, {first_op}\r\nDROP {first_op}"));
+            }
+            Expr::Variable(name) => {
+                dbg!("2");
+                let reference = vars.get(&name).unwrap();
+
+                println!("decl var {}", reference);
+                res.push(format!("MOV $__MATH_RESULT__, {}", reference));
+            }
+        }
+
+        // for i in bin_op {
+        //   println!("{:?}", i);
+        // }
+        // println!("{:?}", bin_op)
+        //  match bin_op {
+
+        // }
+    }
+
+    // println!("{:#?}", tt);
+    // println!("")
+    f(&vars, &mut res, tt);
+    // x.primary()
+    res.push(format!(
+        "SET {destination}, 0\r\nMOV {destination}, $__MATH_RESULT__"
+    ));
+
+    let mut buf = String::new();
+
+    for line in res {
+        buf.push_str(&(line.to_owned() + "\r\n"))
+    }
+
+    Ok(buf)
+}
+
 #[pest_consume::parser]
 impl Parser {
     fn function_call(input: Node) -> Result<String> {
         println!("{:?}", input);
-        
+
         todo!("Add function calls");
     }
 
@@ -156,7 +235,7 @@ impl Parser {
         // };
 
         // println!("fin = {}", final_destination.unwrap_or("no".to_string()));
-      
+
         let mut result = Vec::<String>::new();
 
         let children = input.children();
@@ -165,62 +244,66 @@ impl Parser {
 
         for child in children {
             match child.as_rule() {
-              Rule::number => {
-                first_operand = format!("$__MATH_TEMP__#{}", gen_seed!()); 
-                result.push(format!("SET {first_operand}, {}", child.as_str()))
-              },
-            //   Rule::operation => {
-            //     let mut children2 = child.children();
-            //     let operator = children2.next().unwrap().as_str();
-            //     let symbol = match operator {
-            //       "+" => "ADD",
-            //       "-" => "SUB",
-            //       "*" => "MULT",
-            //       "/" => "DIV",
-            //       "%" => "MOD",
-            //       _ => unreachable!()
-            //     };
+                Rule::number => {
+                    first_operand = format!("$__MATH_TEMP__#{}", gen_seed!());
+                    result.push(format!("SET {first_operand}, {}", child.as_str()))
+                }
+                //   Rule::operation => {
+                //     let mut children2 = child.children();
+                //     let operator = children2.next().unwrap().as_str();
+                //     let symbol = match operator {
+                //       "+" => "ADD",
+                //       "-" => "SUB",
+                //       "*" => "MULT",
+                //       "/" => "DIV",
+                //       "%" => "MOD",
+                //       _ => unreachable!()
+                //     };
 
-            //     let second = children2.next().unwrap();
-            //     match second.as_rule() {
-            //       Rule::number => {
-            //         result.push(format!("SET $__MATH_RESULT__, {}", second.as_str()))
-            //       }
-            //       Rule::operation => {
-            //         result.push(Self::math(second)?);
-            //       }
-            //       _ => unreachable!()
-            //     }
+                //     let second = children2.next().unwrap();
+                //     match second.as_rule() {
+                //       Rule::number => {
+                //         result.push(format!("SET $__MATH_RESULT__, {}", second.as_str()))
+                //       }
+                //       Rule::operation => {
+                //         result.push(Self::math(second)?);
+                //       }
+                //       _ => unreachable!()
+                //     }
 
-            //     // println!("@r = {:#?}", second.as_rule());
+                //     // println!("@r = {:#?}", second.as_rule());
 
-            //     result.push(format!("{} {}, $__MATH_RESULT__\r\nMOV $__MATH_RESULT__, {}\r\n", symbol, first_operand, first_operand))
-            //   },
-              _ => {
-                println!("{:?}", child.as_rule());
-                unreachable!()
-              }
+                //     result.push(format!("{} {}, $__MATH_RESULT__\r\nMOV $__MATH_RESULT__, {}\r\n", symbol, first_operand, first_operand))
+                //   },
+                _ => {
+                    println!("{:?}", child.as_rule());
+                    unreachable!()
+                }
             }
         }
 
-      let mut buf = String::new();
+        let mut buf = String::new();
 
-      for line in result {
-        buf.push_str(&(line.to_owned() + "\r\n"));
-      }
+        for line in result {
+            buf.push_str(&(line.to_owned() + "\r\n"));
+        }
 
-      Ok(buf)
+        Ok(buf)
     }
-  
+
+    // fn group(input: Node) -> Result<String> {
+    //     eval_math(input.as_str(), vars, destination)        
+    // }
+    
     fn variable(input: Node) -> Result<String> {
         println!("varrrr!");
         let mut parts = input.children();
         let name = parts.next().unwrap().as_str();
         let val = parts.next().unwrap();
 
-        let mut line = LINE_NUMBER.lock().unwrap();
-        line.add_assign(10);
-  
+        // let mut line = LINE_NUMBER.lock().unwrap();
+        // line.add_assign(10);
+
         let seed = gen_seed!();
         let x = val.children().next().unwrap();
 
@@ -237,116 +320,96 @@ impl Parser {
                 let d = x.as_str().to_string();
                 format!("SET {new_name}, {d}")
             }
-          
+
             Rule::function_call => Self::function_call(x)?.to_string(),
             Rule::ident => {
                 let mut buf = String::new();
 
                 let other = x.as_str();
-              
+
                 buf.push_str(format!("SET {new_name}, 0\r\n").as_str());
 
                 buf = buf + format!("MOV {new_name}, {}", vars.get(other).unwrap()).as_str();
-              
+
                 buf
+            }
+            Rule::inline_math => {
+                eval_math(&("(".to_owned() + x.as_str() + ")"), &vars, &new_name)?
             },
             // Rule::primary => {
             //   println!("maaath");
             //   format!("{}\r\nSET {new_name}, 0\r\nMOV {new_name}, $__MATH_RESULT__", Self::primary(x)?)
             // }
             Rule::group => {
-                let tt = parse(x.as_str());
-
-                let mut res = Vec::<String>::new();
-              
-                fn f(vars: &HashMap<String, String>, res: &mut Vec<String>, bin_op: crate::math::Expr) -> () {
-                  use crate::math::{Expr, BinOpKind};
-
-                  let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
-
-                  match bin_op {
-                      Expr::BinOp(first, op, second) => {
-                        let cmd = match op {
-                          BinOpKind::Add => "ADD",
-                          BinOpKind::Sub => "SUB",
-                          BinOpKind::Mul => "MULT",
-                          BinOpKind::Mod => "MOD",
-                          BinOpKind::Div => "DIV"
-                        };
-
-                        res.push(format!("SET {first_op}, 0"));
-                        f(vars, res, *first);
-                        res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
-
-                        let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
-
-                        res.push(format!("SET {second_op}, 0"));
-                        f(vars, res, *second);
-
-                        res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
-
-                        res.push(format!("MOV $__MATH_RESULT__, {first_op}"));
-
-                        res.push(format!("{cmd} $__MATH_RESULT__, {second_op}"));
-
-                        res.push(format!("DROP {first_op}\r\nDROP {second_op}"));
-                      }
-                      Expr::UnOp(kind, expr) => {
-                        unimplemented!()
-                      }
-                      Expr::Number(n) => {
-                        res.push(format!("SET {first_op}, {n}\r\nMOV $__MATH_RESULT__, {first_op}\r\nDROP {first_op}"));         
-                      }
-                      Expr::Variable(name) => {
-                        dbg!("2");
-                        let reference = vars.get(&name).unwrap();
-                        
-                        println!("decl var {}", reference);
-                        res.push(format!("MOV $__MATH_RESULT__, {}", reference));
-                      }
-                  }
-                    
-                  // for i in bin_op {
-                  //   println!("{:?}", i);
-                  // }
-                    // println!("{:?}", bin_op)
-                   //  match bin_op {
-                     
-                   // }
-                }
-              
-                // println!("{:#?}", tt);
-                // println!("")
-                f(&vars, &mut res, tt);
-                // x.primary()
-                res.push(format!("SET {new_name}, 0\r\nMOV {new_name}, $__MATH_RESULT__"));
-              
-                let mut buf = String::new();
-
-                for line in res {
-                    buf.push_str(&(line.to_owned() + "\r\n"))
-                }
-
-                buf
+                eval_math(x.as_str(), &vars, &new_name)?
             }
             _ => panic!("undefined: {:?}", rule),
         };
-      
+
         vars.insert(name.to_string(), new_name.to_string());
 
         Ok(format!("{val}"))
     }
 
     fn native(input: Node) -> Result<String> {
-        let code = input.children().next().unwrap()
-                        // .children().next().unwrap()
-                        .as_str();
+        let code = input
+            .children()
+            .next()
+            .unwrap()
+            // .children().next().unwrap()
+            .as_str();
 
-        let split = crate::files::split_string(code);
+        let split = match crate::files::split_string(&code.to_string()) {
+            Ok(n) => n,
+            Err(_) => {
+                return Err(pest_consume::Error::new_from_span(
+                    ErrorVariant::ParsingError {
+                        positives: vec![Rule::native],
+                        negatives: vec![],
+                    },
+                    input.as_span(),
+                ))
+            }
+        };
 
-        dbg!(split);
-      
-        Ok(code.to_string())
+        // dbg!(split);
+
+        let mut buf: String = String::new();
+
+        for token in split {
+            if token.starts_with('$') {
+                let interpreted_name = match token.get(1..token.len()) {
+                    Some(name) => name,
+                    None => {
+                        return Err(pest_consume::Error::new_from_span(
+                            ErrorVariant::ParsingError {
+                                positives: vec![Rule::native],
+                                negatives: vec![],
+                            },
+                            input.as_span(),
+                        ))
+                    }
+                };
+
+                if let Some(compiled_name) = VARIABLE_MAPPING.lock().unwrap().get(interpreted_name) {
+                    dbg!(compiled_name);
+
+                    buf.push_str(&(compiled_name.to_owned() + " "));
+                } else {
+                    return Err(pest_consume::Error::new_from_span(
+                        ErrorVariant::ParsingError {
+                            positives: vec![Rule::native],
+                            negatives: vec![],
+                        }, 
+                        input.as_span()
+                    ))
+                }
+            } else {
+                buf.push_str(&(token + " "));
+            }
+        }
+
+        Ok(buf.trim_end().to_string())
     }
 
     fn function_body(input: Node) -> Result<Vec<String>> {
@@ -359,7 +422,6 @@ impl Parser {
 
                     Rule::native => result.push(Self::native(part)? + "\r\n"),
                     _ => panic!("not implemented"),
-                  
                 }
             }
         }
@@ -482,7 +544,8 @@ pub fn compile(path: &String) -> Result<()> {
     let mut file = File::options()
         .write(true)
         .create(true)
-        .open(compiled_path).unwrap();
+        .open(compiled_path)
+        .unwrap();
 
     let _ = file.write_all(buf.as_bytes());
     Ok(())

@@ -117,7 +117,7 @@ where
     }
 
     // Construct a unary postfix expression, e.g. 1?
-    fn postfix(&mut self, lhs: Expr, tree: Self::Input) -> Result<Expr> {
+    fn postfix(&mut self, _lhs: Expr, _tree: Self::Input) -> Result<Expr> {
         unimplemented!()
         // let op = match tree.as_str() {
         //     "?" => UnOpKind::Try,
@@ -125,6 +125,13 @@ where
         // };
         // Ok(Expr::UnOp(op, Box::new(lhs)))
     }
+}
+
+pub fn parse(input: &str) -> Expr {
+    let tt = TokenTreeParser::parse(Rule::group, &input)
+        .unwrap()
+        .into_iter();
+    ExprParser.parse(tt.into_iter()).unwrap()
 }
 
 // fn main() {
@@ -141,91 +148,3 @@ where
 //     println!("Expression: {:?}", expr);
 // }
 
-#[cfg(test)]
-mod test {
-    fn parse(input: &str) -> Expr {
-        let tt = TokenTreeParser::parse(Rule::group, &input)
-            .unwrap()
-            .into_iter();
-        ExprParser.parse(tt.into_iter()).unwrap()
-    }
-    use super::BinOpKind::*;
-    use super::Expr::*;
-    use super::UnOpKind::*;
-    use super::*;
-
-    #[test]
-    fn test1() {
-        assert_eq!(
-            parse("1=2=3"),
-            BinOp(Box::new(Number(1f32)), Eq, Box::new(Number(2f32)))
-        );
-    }
-
-    #[test]
-    fn test2() {
-        assert_eq!(
-            parse("1*2+3"),
-            BinOp(
-                Box::new(BinOp(Box::new(Number(1f32)), Mul, Box::new(Number(2f32)))),
-                Add,
-                Box::new(Number(3f32))
-            )
-        );
-    }
-
-    #[test]
-    fn test3() {
-        assert_eq!(
-            parse("1*!2^3"),
-            BinOp(
-                Box::new(Number(1f32)),
-                Mul,
-                Box::new(UnOp(
-                    Not,
-                    Box::new(BinOp(Box::new(Number(2f32)), Pow, Box::new(Number(3f32))))
-                ))
-            )
-        );
-    }
-
-    #[test]
-    fn test4() {
-        assert_eq!(
-            parse("-1?*!2^3+3/2?-1"),
-            BinOp(
-                Box::new(BinOp(
-                    Box::new(BinOp(
-                        Box::new(UnOp(Try, Box::new(UnOp(Neg, Box::new(Number(1f32)))))),
-                        Mul,
-                        Box::new(UnOp(
-                            Not,
-                            Box::new(BinOp(Box::new(Number(2f32)), Pow, Box::new(Number(3f32))))
-                        ))
-                    )),
-                    Add,
-                    Box::new(BinOp(
-                        Box::new(Number(3f32)),
-                        Div,
-                        Box::new(UnOp(Try, Box::new(Number(2f32))))
-                    ))
-                )),
-                Sub,
-                Box::new(Number(1f32))
-            )
-        );
-    }
-}
-
-pub fn parse(input: &str) -> Expr {
-    let tt = TokenTreeParser::parse(Rule::group, &input)
-        .unwrap()
-        .into_iter();
-    ExprParser.parse(tt.into_iter()).unwrap()
-}
-
-// pub fn bin_op(op: BinOpKind) -> String {
-//     let result: Vec<String> = Vec::new();
-
-//     return "".to_string();
-// }

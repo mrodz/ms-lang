@@ -1,19 +1,26 @@
+// START Constants
 alpha = { 'a'..'z' | 'A'..'Z' }
 digit = { '0'..'9' }
 underscore = { "_" }
 
 WHITESPACE = _{ " " }
 COMMENT = _{ "//" }
+// END Constants
 
-
+// This is a any valid identity.
+// - Function names
+// - Variable names
 ident = @{ !digit ~ (alpha | digit | underscore)+ }
 
+// START Strings
 string_literal_inner_d = { ((!"\"") ~ ANY)* }
 string_literal_double = @{ "\"" ~ string_literal_inner_d ~ "\"" }
 string_literal_inner_s = { ((!"'") ~ ANY)* }
 string_literal_single = @{ "'" ~ string_literal_inner_s ~ "'" }
+// END Strings
 
-function_call = { ident ~ "(" ~ (function_arg) ~ ("," ~ function_arg)* ~ ")" }
+// START Functions
+function_call = { ident ~ "(" ~ ((function_arg) ~ ("," ~ function_arg)*)? ~ ")" }
 function_arg = { val | ident }
 
 function_arguments = { (ident ~ ("," ~ ident)*)? }
@@ -23,39 +30,34 @@ function = { "func" ~ ident ~ "(" ~ function_arguments ~ ")" ~ "{" ~ function_bo
 function_body = {
 	((tabs ~ (statement)? ~ NEWLINE)*)
 }
+// END Functions
 
+// START Native statement
 native_capture = { (!"\"" ~ ANY)* }
-
 native = { "native" ~ "\"" ~ native_capture ~ "\"" ~ ";" }
+// END Native statement
 
-statement = { tabs ~ (variable | function | native) }
+statement = { tabs ~ (variable | (function_call ~ ";") | native) }
 
+// START If statement
 b_true = { "true" }
 b_false = { "false" }
 boolean = { b_true | b_false }
+// END If statement
 
+// START Math
 number = { ASCII_DIGIT{1,} ~ ("." ~ ASCII_DIGIT{1,})? }
 
-// addition = { "+" }
-// subtraction = { "-" }
-// multiplication = { "*" }
-// division = { "/" }
-// modulo = { "%" }
-
-// math_op = { addition | subtraction | multiplication | division | modulo }
-
-// operation = { math_op ~ number }
-
-// res_math = { (number | res_math) ~ math_op ~ (number | res_math) }
-// math = { number | (res_math)* }
+// Simple equation: 1 + 2 * 10 / 5
+inline_math = { (number | ident) ~ (infix ~ (number | ident)){1,} }
 
 group   =  { prefix* ~ primary ~ (infix ~ prefix* ~ primary )* }
 infix   =  { "+" | "-" | "*" | "/" | "%" }
 prefix  =  { "-" | "!" }
 primary = _{ (number | ident) | "(" ~ group ~ ")" }
-  // num   = @{ (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ | ASCII_DIGIT) }
+// END Math
 
-val = { primary | boolean | (string_literal_double | string_literal_single) | function_call | ident }
+val = { inline_math | primary | boolean | (string_literal_double | string_literal_single) | function_call | ident }
 
 variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
 
