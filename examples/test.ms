@@ -1,12 +1,9 @@
-var a = 5;
-var b = 10;
+var hello = "Hello World!";
+var a = -13;
 
 func main() {
-  var c = 3;
-  var x = a + b * c;
-
-  native "LOAD $x";
-  native "SYSCALLRM Print";
-
-
+  var b = 2;
+  var c = (-(a * b));
+  native "LOAD $c";
+  native "SYSCALLRM PrintLn";
 }

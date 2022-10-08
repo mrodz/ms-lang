@@ -1,9 +1,9 @@
 use lazy_static::lazy_static;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::fs::File;
 use std::io::{BufReader, Read};
-use std::str::{FromStr, Lines};
+use std::str::{Lines};
 
 use self::command_types::{Command, GlobalFunctions};
 
@@ -117,6 +117,7 @@ lazy_static! {
         insert_command!(LTE, lte);
         insert_command!(GTE, gte);
         insert_command!(CAST_NUMBER, cast_number);
+        insert_command!(NEGATE, negate);
 
         command_map
     };
@@ -230,40 +231,40 @@ mod commands {
         }
     }
 
-    // fn num_to_str(d: Variable) -> Result<Variable, ()> {
-    //     if let Variable::Number(n) = d{
-    //       return Ok(Variable::String(d.to_string()));
-    //     }
-    //   Err(())
-    // }
+    pub fn negate(
+        ctx: &Line,
+        variables: &mut VarMapping,
+        _: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions
+    ) -> CommandRet {
+        if ctx.arguments.len() != 1 {
+            return Err(MountError::new(format!(
+                "Invalid 'NEGATE' on line {}\r\n\tSyntax --\r\n\tNEGATE $VarName",
+                ctx.number
+            )))
+        } 
 
-    // pub fn cast(
-    //     ctx: &Line,
-    //     variables: &mut VarMapping,
-    //     _: &mut LoadedVars,
-    //     _function_context: &FunctionContext,
-    //     _functions: &GlobalFunctions,
-    // ) -> CommandRet {
-    //     if let (Some(name), Some(r#type)) = (ctx.arguments.get(0), ctx.arguments.get(1)) {
-    //         if let Some(var) = variables.get(name) {
-    //             // let new_var = match r#type {
-    //             //   "str" => Variable::String(),
-    //             //   "number" => Variable::Number,
+        let name = ctx.arguments.get(0).unwrap();
 
-    //             // }
-    //         } else {
-    //             Err(MountError::new(format!(
-    //                 "Variable '{}' has not been declared, but it is referenced on line {}",
-    //                 name, ctx.number
-    //             )))
-    //         }
-    //     } else {
-    //         Err(MountError::new(format!(
-    //             "Invalid 'CAST' on line {}\r\n\tSyntax --\r\n\tCAST $VarName, type",
-    //             ctx.number
-    //         )))
-    //     }
-    // }
+        if let Some(var) = variables.get(name) {
+            if let Variable::Number(n) = var {
+                variables.insert(name.to_string(), Variable::Number(-*n));
+
+                Ok(())
+            } else {
+                return Err(MountError::new(
+                    format!("Invalid data types on line {}: Expected <int>", ctx.number)
+                        .to_string(),
+                ))
+            }
+        } else {
+            return Err(MountError::new(format!(
+                "Variable '{}' has not been declared, but it is referenced on line {}",
+                name, ctx.number
+            )))
+        }
+    }
 
     pub fn set(
         ctx: &Line,

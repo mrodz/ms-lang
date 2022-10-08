@@ -46,15 +46,16 @@ boolean = { b_true | b_false }
 // END If statement
 
 // START Math
-number = { ASCII_DIGIT{1,} ~ ("." ~ ASCII_DIGIT{1,})? }
+number = { prefix? ~ (ASCII_DIGIT{1,} ~ ("." ~ ASCII_DIGIT{1,})?) }
 
 // Simple equation: 1 + 2 * 10 / 5
-inline_math = { (number | ident) ~ (infix ~ (number | ident)){1,} }
+inline_math = { ((number) | ident) ~ (infix ~ ((number) | ident)){1,} }
 
 group   =  { prefix* ~ primary ~ (infix ~ prefix* ~ primary )* }
 infix   =  { "+" | "-" | "*" | "/" | "%" }
-prefix  =  { "-" | "!" }
-primary = _{ (number | ident) | "(" ~ group ~ ")" }
+prefix  =  { "-" }
+// prefix_n = _{ "-" }
+primary = _{ ((number) | ident) | "(" ~ group ~ ")" }
 // END Math
 
 val = { inline_math | primary | boolean | (string_literal_double | string_literal_single) | function_call | ident }

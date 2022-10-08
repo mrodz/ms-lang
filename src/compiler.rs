@@ -6,7 +6,6 @@ use rand::prelude::*;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
-use std::ops::AddAssign;
 use std::sync::Mutex;
 
 type Result<T> = std::result::Result<T, Error<Rule>>;
@@ -15,10 +14,6 @@ type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 #[derive(ParserDerive)]
 #[grammar = "grammar.pest"]
 struct Parser;
-
-// #[derive(ParserDerive)]
-// #[grammar = "grammar.pest"]
-// struct TokenTreeParser;
 
 lazy_static! {
     static ref VARIABLE_MAPPING: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
@@ -33,106 +28,6 @@ macro_rules! gen_seed {
         rng.gen::<u32>()
     }};
 }
-
-// #[derive(Debug, Eq, PartialEq)]
-// pub enum Expr {
-//     BinOp(Box<Expr>, BinOpKind, Box<Expr>),
-//     UnOp(UnOpKind, Box<Expr>),
-//     Int(i32),
-// }
-
-// #[derive(Debug, Eq, PartialEq)]
-// pub enum BinOpKind {
-//     Add,
-//     Sub,
-//     Mul,
-//     Div,
-//     Pow,
-//     Eq,
-// }
-
-// #[derive(Debug, Eq, PartialEq)]
-// pub enum UnOpKind {
-//     Not,
-//     Neg,
-//     Try,
-// }
-
-// use pratt::{Affix, Associativity, PrattParser, Precedence, Result as PrattResult};
-
-// impl<'i, I> PrattParser<I> for Parser
-// where
-//     I: Iterator<Item = Pair<'i, Rule>>,
-// {
-//     type Error = pratt::NoError;
-//     type Input = Pair<'i, Rule>;
-//     type Output = Expr;
-
-//     // Query information about an operator (Affix, Precedence, Associativity)
-//     fn query(&mut self, tree: &Self::Input) -> PrattResult<Affix> {
-//         let affix = match (tree.as_rule(), tree.as_str()) {
-//             // (Rule::infix, "=") => Affix::Infix(Precedence(2), Associativity::Neither),
-//             (Rule::infix, "+") => Affix::Infix(Precedence(3), Associativity::Left),
-//             (Rule::infix, "-") => Affix::Infix(Precedence(3), Associativity::Left),
-//             (Rule::infix, "*") => Affix::Infix(Precedence(4), Associativity::Left),
-//             (Rule::infix, "/") => Affix::Infix(Precedence(4), Associativity::Left),
-//             (Rule::infix, "%") => Affix::Infix(Precedence(4), Associativity::Left),
-//             // (Rule::postfix, "?") => Affix::Postfix(Precedence(5)),
-//             (Rule::prefix, "-") => Affix::Prefix(Precedence(6)),
-//             (Rule::prefix, "!") => Affix::Prefix(Precedence(6)),
-//             (Rule::infix, "^") => Affix::Infix(Precedence(7), Associativity::Right),
-//             (Rule::group, _) => Affix::Nilfix,
-//             (Rule::primary, _) => Affix::Nilfix,
-//             (Rule::num, _) => Affix::Nilfix,
-//             _ => unreachable!(),
-//         };
-//         Ok(affix)
-//     }
-
-//     // Construct a primary expression, e.g. a number
-//     fn primary(&mut self, tree: Self::Input) -> PrattResult<Expr> {
-//         let expr = match tree.as_rule() {
-//             Rule::num => Expr::Int(tree.as_str().parse().unwrap()),
-//             Rule::group => self.parse(&mut tree.into_inner()).unwrap(),
-//             _ => unreachable!(),
-//         };
-//         Ok(expr)
-//     }
-
-//     // Construct a binary infix expression, e.g. 1+1
-//     fn infix(&mut self, lhs: Expr, tree: Self::Input, rhs: Expr) -> PrattResult<Expr> {
-//         let op = match tree.as_str() {
-//             "+" => BinOpKind::Add,
-//             "-" => BinOpKind::Sub,
-//             "*" => BinOpKind::Mul,
-//             "/" => BinOpKind::Div,
-//             "^" => BinOpKind::Pow,
-//             "=" => BinOpKind::Eq,
-//             _ => unreachable!(),
-//         };
-//         Ok(Expr::BinOp(Box::new(lhs), op, Box::new(rhs)))
-//     }
-
-//     // Construct a unary prefix expression, e.g. !1
-//     fn prefix(&mut self, tree: Self::Input, rhs: Expr) -> PrattResult<Expr> {
-//         let op = match tree.as_str() {
-//             "!" => UnOpKind::Not,
-//             "-" => UnOpKind::Neg,
-//             _ => unreachable!(),
-//         };
-//         Ok(Expr::UnOp(op, Box::new(rhs)))
-//     }
-
-//     // Construct a unary postfix expression, e.g. 1?
-//     fn postfix(&mut self, _lhs: Expr, _tree: Self::Input) -> PrattResult<Expr> {
-//         unimplemented!()
-//         // let op = match tree.as_str() {
-//         //     "?" => UnOpKind::Try,
-//         //     _ => unreachable!(),
-//         // };
-//         // Ok(Expr::UnOp(op, Box::new(lhs)))
-//     }
-// }
 
 pub(crate) fn eval_math(math: &str, vars: &HashMap<String, String>, destination: &String) -> Result<String> {
     let tt = crate::math::parse(math);
@@ -175,8 +70,10 @@ pub(crate) fn eval_math(math: &str, vars: &HashMap<String, String>, destination:
 
                 res.push(format!("DROP {first_op}\r\nDROP {second_op}"));
             }
-            Expr::UnOp(kind, expr) => {
-                unimplemented!()
+            Expr::UnOp(_, expr) => {
+                f(vars, res, *expr);
+
+                res.push(format!("NEGATE $__MATH_RESULT__"));
             }
             Expr::Number(n) => {
                 res.push(format!("SET {first_op}, {n}\r\nMOV $__MATH_RESULT__, {first_op}\r\nDROP {first_op}"));
@@ -189,20 +86,9 @@ pub(crate) fn eval_math(math: &str, vars: &HashMap<String, String>, destination:
                 res.push(format!("MOV $__MATH_RESULT__, {}", reference));
             }
         }
-
-        // for i in bin_op {
-        //   println!("{:?}", i);
-        // }
-        // println!("{:?}", bin_op)
-        //  match bin_op {
-
-        // }
     }
 
-    // println!("{:#?}", tt);
-    // println!("")
     f(&vars, &mut res, tt);
-    // x.primary()
     res.push(format!(
         "SET {destination}, 0\r\nMOV {destination}, $__MATH_RESULT__"
     ));
@@ -225,14 +111,9 @@ impl Parser {
     }
 
     fn primary(input: Node) -> Result<String> {
-        println!("woo");
-        // println!("node = {}", input.as_str());
+        unimplemented!();
 
-        // let mut final_destination: Option<String> = if input.as_rule() == Rule::variable {
-        //     Some(input.as_str().to_string())
-        // } else {
-        //   None
-        // };
+        println!("woo");
 
         // println!("fin = {}", final_destination.unwrap_or("no".to_string()));
 
@@ -248,33 +129,6 @@ impl Parser {
                     first_operand = format!("$__MATH_TEMP__#{}", gen_seed!());
                     result.push(format!("SET {first_operand}, {}", child.as_str()))
                 }
-                //   Rule::operation => {
-                //     let mut children2 = child.children();
-                //     let operator = children2.next().unwrap().as_str();
-                //     let symbol = match operator {
-                //       "+" => "ADD",
-                //       "-" => "SUB",
-                //       "*" => "MULT",
-                //       "/" => "DIV",
-                //       "%" => "MOD",
-                //       _ => unreachable!()
-                //     };
-
-                //     let second = children2.next().unwrap();
-                //     match second.as_rule() {
-                //       Rule::number => {
-                //         result.push(format!("SET $__MATH_RESULT__, {}", second.as_str()))
-                //       }
-                //       Rule::operation => {
-                //         result.push(Self::math(second)?);
-                //       }
-                //       _ => unreachable!()
-                //     }
-
-                //     // println!("@r = {:#?}", second.as_rule());
-
-                //     result.push(format!("{} {}, $__MATH_RESULT__\r\nMOV $__MATH_RESULT__, {}\r\n", symbol, first_operand, first_operand))
-                //   },
                 _ => {
                     println!("{:?}", child.as_rule());
                     unreachable!()
@@ -291,18 +145,11 @@ impl Parser {
         Ok(buf)
     }
 
-    // fn group(input: Node) -> Result<String> {
-    //     eval_math(input.as_str(), vars, destination)        
-    // }
-    
     fn variable(input: Node) -> Result<String> {
         println!("varrrr!");
         let mut parts = input.children();
         let name = parts.next().unwrap().as_str();
         let val = parts.next().unwrap();
-
-        // let mut line = LINE_NUMBER.lock().unwrap();
-        // line.add_assign(10);
 
         let seed = gen_seed!();
         let x = val.children().next().unwrap();
@@ -336,13 +183,10 @@ impl Parser {
             Rule::inline_math => {
                 eval_math(&("(".to_owned() + x.as_str() + ")"), &vars, &new_name)?
             },
-            // Rule::primary => {
-            //   println!("maaath");
-            //   format!("{}\r\nSET {new_name}, 0\r\nMOV {new_name}, $__MATH_RESULT__", Self::primary(x)?)
-            // }
             Rule::group => {
                 eval_math(x.as_str(), &vars, &new_name)?
-            }
+            },
+
             _ => panic!("undefined: {:?}", rule),
         };
 
@@ -356,7 +200,6 @@ impl Parser {
             .children()
             .next()
             .unwrap()
-            // .children().next().unwrap()
             .as_str();
 
         let split = match crate::files::split_string(&code.to_string()) {
@@ -371,8 +214,6 @@ impl Parser {
                 ))
             }
         };
-
-        // dbg!(split);
 
         let mut buf: String = String::new();
 
@@ -421,7 +262,7 @@ impl Parser {
                     Rule::variable => result.push(Self::variable(part)? + "\r\n"),
 
                     Rule::native => result.push(Self::native(part)? + "\r\n"),
-                    _ => panic!("not implemented"),
+                    _ => panic!("not implemented: {:?}", rule),
                 }
             }
         }
@@ -544,6 +385,7 @@ pub fn compile(path: &String) -> Result<()> {
     let mut file = File::options()
         .write(true)
         .create(true)
+        .truncate(true) // fixes bug where contents were not being fully overwritten.
         .open(compiled_path)
         .unwrap();
 
