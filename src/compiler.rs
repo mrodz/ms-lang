@@ -259,7 +259,7 @@ impl Parser {
 
                 let mut res = Vec::<String>::new();
               
-                fn f(res: &mut Vec<String>, bin_op: crate::math::Expr) -> () {
+                fn f(vars: &HashMap<String, String>, res: &mut Vec<String>, bin_op: crate::math::Expr) -> () {
                   use crate::math::{Expr, BinOpKind};
 
                   let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
@@ -275,13 +275,13 @@ impl Parser {
                         };
 
                         res.push(format!("SET {first_op}, 0"));
-                        f(res, *first);
+                        f(vars, res, *first);
                         res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
 
                         let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
 
                         res.push(format!("SET {second_op}, 0"));
-                        f(res, *second);
+                        f(vars, res, *second);
 
                         res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
 
@@ -298,7 +298,11 @@ impl Parser {
                         res.push(format!("SET {first_op}, {n}\r\nMOV $__MATH_RESULT__, {first_op}\r\nDROP {first_op}"));         
                       }
                       Expr::Variable(name) => {
-                        res.push(format!("MOV $__MATH_RESULT__, {}", VARIABLE_MAPPING.lock().unwrap().get(&name).unwrap()));
+                        dbg!("2");
+                        let reference = vars.get(&name).unwrap();
+                        
+                        println!("decl var {}", reference);
+                        res.push(format!("MOV $__MATH_RESULT__, {}", reference));
                       }
                   }
                     
@@ -313,7 +317,7 @@ impl Parser {
               
                 // println!("{:#?}", tt);
                 // println!("")
-                f(&mut res, tt);
+                f(&vars, &mut res, tt);
                 // x.primary()
                 res.push(format!("SET {new_name}, 0\r\nMOV {new_name}, $__MATH_RESULT__"));
               
@@ -333,6 +337,18 @@ impl Parser {
         Ok(format!("{val}"))
     }
 
+    fn native(input: Node) -> Result<String> {
+        let code = input.children().next().unwrap()
+                        // .children().next().unwrap()
+                        .as_str();
+
+        let split = crate::files::split_string(code);
+
+        dbg!(split);
+      
+        Ok(code.to_string())
+    }
+
     fn function_body(input: Node) -> Result<Vec<String>> {
         let mut result = Vec::new();
         for statement in input.children() {
@@ -340,7 +356,10 @@ impl Parser {
                 let rule = part.as_rule();
                 match rule {
                     Rule::variable => result.push(Self::variable(part)? + "\r\n"),
+
+                    Rule::native => result.push(Self::native(part)? + "\r\n"),
                     _ => panic!("not implemented"),
+                  
                 }
             }
         }

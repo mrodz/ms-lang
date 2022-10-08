@@ -8,12 +8,12 @@ use std::str::{FromStr, Lines};
 use self::command_types::{Command, GlobalFunctions};
 
 mod command_types {
-    use super::{CompilerError, Line, Variable};
+    use super::{MountError, Line, Variable};
     use std::collections::HashMap;
 
     pub type VarMapping = HashMap<String, Variable>;
     pub type LoadedVars = Vec<Variable>;
-    pub type CommandRet = Result<(), CompilerError>;
+    pub type CommandRet = Result<(), MountError>;
     pub type FunctionContext<'a> = (String, &'a Vec<Line>);
     pub type GlobalFunctions = HashMap<String, Vec<Line>>;
     pub type Command = fn(
@@ -56,19 +56,19 @@ impl std::fmt::Display for Variable {
 }
 
 #[derive(Debug)]
-pub struct CompilerError {
+pub struct MountError {
     message: String,
 }
 
-impl std::error::Error for CompilerError {}
+impl std::error::Error for MountError {}
 
-impl std::fmt::Display for CompilerError {
+impl std::fmt::Display for MountError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Compiler Error: {}", self.message)
     }
 }
 
-impl CompilerError {
+impl MountError {
     fn new(message: String) -> Self {
         Self { message: message }
     }
@@ -135,7 +135,7 @@ pub fn run_program(path: &String) {
     let mapping = match build_program(path) {
         Ok(m) => m,
         Err(e) => {
-            println!("Error during compilation: {:?}", e);
+            println!("Error during mount: {:?}", e);
             return;
         }
     };
@@ -172,17 +172,17 @@ mod commands {
     use super::command_types::*;
     use super::execute_function;
     use super::var_from_str;
-    use super::CompilerError;
+    use super::MountError;
     use super::Line;
     use super::Variable;
 
     pub fn var_exists<'a>(
         name: &String,
         variables: &'a VarMapping,
-    ) -> Result<&'a super::Variable, CompilerError> {
+    ) -> Result<&'a super::Variable, MountError> {
         match variables.get(name) {
             Some(v) => Ok(v),
-            None => Err(CompilerError::new(format!(
+            None => Err(MountError::new(format!(
                 "Variable {name} is not in scope."
             ))),
         }
@@ -204,7 +204,7 @@ mod commands {
                         if let Variable::Number(_) = maybe_var {
                             maybe_var
                         } else {
-                            return Err(CompilerError::new(format!(
+                            return Err(MountError::new(format!(
                     "Invalid 'CAST_N' on line {}\r\n\tVariable cannot be cast to a number\r\n\tFound {}",
                     ctx.number, name
                 )));
@@ -217,13 +217,13 @@ mod commands {
 
                 Ok(())
             } else {
-                Err(CompilerError::new(format!(
+                Err(MountError::new(format!(
                     "Variable '{}' has not been declared, but it is referenced on line {}",
                     name, ctx.number
                 )))
             }
         } else {
-            Err(CompilerError::new(format!(
+            Err(MountError::new(format!(
                 "Invalid 'CAST_N' on line {}\r\n\tSyntax --\r\n\tCAST_N $VarName, type",
                 ctx.number
             )))
@@ -252,13 +252,13 @@ mod commands {
 
     //             // }
     //         } else {
-    //             Err(CompilerError::new(format!(
+    //             Err(MountError::new(format!(
     //                 "Variable '{}' has not been declared, but it is referenced on line {}",
     //                 name, ctx.number
     //             )))
     //         }
     //     } else {
-    //         Err(CompilerError::new(format!(
+    //         Err(MountError::new(format!(
     //             "Invalid 'CAST' on line {}\r\n\tSyntax --\r\n\tCAST $VarName, type",
     //             ctx.number
     //         )))
@@ -280,13 +280,13 @@ mod commands {
 
                 variables.insert(name.to_string(), value);
             } else {
-                return Err(CompilerError::new(format!(
+                return Err(MountError::new(format!(
                     "Invalid 'SET' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
                     ctx.number, name
                 )));
             }
         } else {
-            return Err(CompilerError::new(format!(
+            return Err(MountError::new(format!(
                 "Invalid 'SET' on line {}\r\n\tSyntax --\r\n\tSET $VarName, VALUE",
                 ctx.number
             )));
@@ -319,7 +319,7 @@ mod commands {
     ) -> CommandRet {
         for var in ctx.arguments.as_slice() {
             if !variables.contains_key(var.as_str()) {
-                return Err(CompilerError::new(format!(
+                return Err(MountError::new(format!(
                     "Variable '{}' has not been declared, but it is referenced on line {}",
                     var, ctx.number
                 )));
@@ -341,7 +341,7 @@ mod commands {
         _functions: &GlobalFunctions,
     ) -> CommandRet {
         if ctx.arguments.len() != 1 && ctx.arguments.len() != 2 {
-            return Err(CompilerError::new(format!(
+            return Err(MountError::new(format!(
                 "Invalid 'SYSCALL' on line {}\r\n\tSyntax --\r\n\tSYSCALL NativeFunctionName, OptionalReturnAddress",
                 ctx.number
             )));
@@ -357,7 +357,7 @@ mod commands {
             "StrLen" => built_in_functions::str_len,
             "Input" => built_in_functions::input,
             _ => {
-                return Err(CompilerError::new(format!(
+                return Err(MountError::new(format!(
                     "{} is not a native function.",
                     func_name
                 )))
@@ -366,7 +366,7 @@ mod commands {
 
         if let (Ok(Some(result)), Some(name)) = (result, ctx.arguments.get(1)) {
             if !variables.contains_key(name) {
-                return Err(CompilerError::new(format!(
+                return Err(MountError::new(format!(
                     "Variable '{}' has not been declared, but it is referenced on line {}",
                     name, ctx.number
                 )));
@@ -429,7 +429,7 @@ mod commands {
 			_functions: &GlobalFunctions
         ) -> CommandRet {
 			if ctx.arguments.len() != 2 {
-            	return Err(CompilerError::new(
+            	return Err(MountError::new(
                 	format!(
                     	"Invalid '{}' on line {}\r\n\tSyntax --\r\n\tADD $VarName1, $VarName2",
                     	stringify!($name),
@@ -447,7 +447,7 @@ mod commands {
                 	let n1 = match maybe1.unwrap() {
                     	super::Variable::Number(n1) => *n1,
                     	_ => {
-                        	return Err(CompilerError::new(
+                        	return Err(MountError::new(
                             	format!("Invalid data types on line {}: Expected <int>", ctx.number)
                                 	.to_string(),
                         	))
@@ -460,7 +460,7 @@ mod commands {
     	                match maybe2.unwrap() {
         	                super::Variable::Number(n2) => *n2,
             	            _ => {
-                	            return Err(CompilerError::new(
+                	            return Err(MountError::new(
                     	            format!(
                         	            "Invalid data types on line {}: Expected <int>",
                             	        ctx.number
@@ -471,7 +471,7 @@ mod commands {
                 	} else if let Ok(number) = f32::from_str(name2) {
                     	number
                 	} else {
-						return Err(CompilerError::new(
+						return Err(MountError::new(
                         	format!("Invalid data types on line {}: Expected <int>", ctx.number)
                             .to_string(),
                     	));
@@ -480,7 +480,7 @@ mod commands {
                 	#[allow(mutable_borrow_reservation_conflict)]
                 	variables.insert(name1.to_string(), super::Variable::Number($op(n1, n2)));
             	} else if maybe2_is {
-                	return Err(CompilerError::new(format!("Invalid '{}' on line {}\r\n\tAdding {} to {}, but at least one of these names are not in scope.", stringify!($name), ctx.number, name2, name2).to_string()));
+                	return Err(MountError::new(format!("Invalid '{}' on line {}\r\n\tAdding {} to {}, but at least one of these names are not in scope.", stringify!($name), ctx.number, name2, name2).to_string()));
             	}
         	}
 
@@ -505,14 +505,14 @@ mod commands {
         _functions: &GlobalFunctions,
     ) -> CommandRet {
         if ctx.arguments.len() != 1 {
-            return Err(CompilerError::new(format!(
+            return Err(MountError::new(format!(
                 "Invalid 'DROP' on line {}\r\n\tSyntax --\r\n\tDROP $VarName",
                 ctx.number
             )));
         }
         match variables.remove(ctx.arguments.get(0).unwrap()) {
             Some(_) => Ok(()),
-            None => Err(CompilerError::new(
+            None => Err(MountError::new(
                 format!("Variable {} is not loaded.", ctx.arguments.get(0).unwrap()).to_string(),
             )),
         }
@@ -537,19 +537,19 @@ mod commands {
                             variables.insert(first.to_string(), Variable::Boolean(one $op two));
                             Ok(())
                         } else {
-                            Err(CompilerError::new(format!(
+                            Err(MountError::new(format!(
                                 "Invalid data types on line {}: Expected <boolean, boolean>",
                                 ctx.number
                             )))
                         }
                     } else {
-                        Err(CompilerError::new(format!(
+                        Err(MountError::new(format!(
                             "Encountered undefined variables on line {}",
                             ctx.number
                         )))
                     }
                 } else {
-                    Err(CompilerError::new(format!(
+                    Err(MountError::new(format!(
                         "Invalid '{}' on line {}\r\n\tSyntax --\r\n\tAND $VarName1, $VarName2",
                         stringify!($name),
                         ctx.number
@@ -577,19 +577,19 @@ mod commands {
                     variables.insert(name.to_string(), Variable::Boolean(b));
                     Ok(())
                 } else {
-                    Err(CompilerError::new(
+                    Err(MountError::new(
                         format!("Invalid data types on line {}: Expected <bool>", ctx.number)
                             .to_string(),
                     ))
                 }
             } else {
-                Err(CompilerError::new(format!(
+                Err(MountError::new(format!(
                     "Variable '{}' has not been declared, but it is referenced on line {}",
                     name, ctx.number
                 )))
             }
         } else {
-            Err(CompilerError::new(format!(
+            Err(MountError::new(format!(
                 "Invalid 'NOT' on line {}\r\n\tSyntax --\r\n\tNOT $VarName",
                 ctx.number
             )))
@@ -614,7 +614,7 @@ mod commands {
         functions: &GlobalFunctions,
     ) -> CommandRet {
         if ctx.arguments.len() != 3 {
-            return Err(CompilerError::new(
+            return Err(MountError::new(
                 format!(
                     "Invalid 'IF' on line {}\r\n\tSyntax --\r\n\tIF $BoolVarName, FunctionName1, FunctionName2",
                     ctx.number
@@ -641,7 +641,7 @@ mod commands {
                 )?
             };
         } else {
-            return Err(CompilerError::new(
+            return Err(MountError::new(
                 format!("Invalid data types on line {}: Expected <bool>", ctx.number).to_string(),
             ));
         }
@@ -659,7 +659,7 @@ mod commands {
         _functions: &GlobalFunctions,
     ) -> CommandRet {
         if ctx.arguments.len() != 3 {
-            return Err(CompilerError::new(
+            return Err(MountError::new(
                 format!(
                     "Invalid '{}' on line {}\r\n\tSyntax --\r\n\t{} $DestinationVarName, $VarName1, $VarName2",
                     stringify!(name).to_ascii_uppercase(),
@@ -679,7 +679,7 @@ mod commands {
             variables.insert(dest_name.to_string(), Variable::Boolean(res));
             Ok(())
         } else {
-          Err(CompilerError::new(format!("Invalid data types on line {}: Expected <number, number>", ctx.number)))
+          Err(MountError::new(format!("Invalid data types on line {}: Expected <number, number>", ctx.number)))
         }
     }
       };
@@ -695,7 +695,7 @@ mod commands {
         _functions: &GlobalFunctions,
     ) -> CommandRet {
         if ctx.arguments.len() != 3 {
-            return Err(CompilerError::new(
+            return Err(MountError::new(
                 format!(
                     "Invalid '{}' on line {}\r\n\tSyntax --\r\n\t{} $DestinationVarName, $VarName1, $VarName2",
                     stringify!($name).to_ascii_uppercase(),
@@ -750,7 +750,7 @@ mod commands {
         _functions: &GlobalFunctions,
     ) -> CommandRet {
         if ctx.arguments.len() != 2 {
-            return Err(CompilerError::new(
+            return Err(MountError::new(
                 format!(
                     "Invalid 'MOV' on line {}\r\n\tSyntax --\r\n\tMOV $VarName1, $VarName2",
                     ctx.number
@@ -780,7 +780,7 @@ mod commands {
         functions: &GlobalFunctions,
     ) -> CommandRet {
         if ctx.arguments.len() != 1 {
-            return Err(CompilerError::new(
+            return Err(MountError::new(
                 format!(
                     "Invalid 'JMP' on line {}\r\n\tSyntax --\r\n\tJMP FunctionName",
                     ctx.number
@@ -796,9 +796,9 @@ mod commands {
 }
 
 mod built_in_functions {
-    use super::{command_types::LoadedVars, CompilerError, Variable};
+    use super::{command_types::LoadedVars, MountError, Variable};
 
-    pub fn input(_loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
+    pub fn input(_loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, MountError> {
         use std::io::{stdin, stdout, Write};
 
         let _ = stdout().flush();
@@ -818,7 +818,7 @@ mod built_in_functions {
         Ok(Some(Variable::String(result)))
     }
 
-    pub fn print(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
+    pub fn print(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, MountError> {
         let mut string_buf = String::new();
 
         for var in loaded_variables {
@@ -831,13 +831,13 @@ mod built_in_functions {
         Ok(None)
     }
 
-    pub fn println(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
+    pub fn println(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, MountError> {
         print(loaded_variables)?;
         println!();
         Ok(None)
     }
 
-    pub fn str_cat(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
+    pub fn str_cat(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, MountError> {
         let mut result: String = String::new();
 
         for var in loaded_variables {
@@ -890,7 +890,7 @@ mod built_in_functions {
         }
     }
 
-    pub fn str_len(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
+    pub fn str_len(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, MountError> {
         if let Some(name) = loaded_variables.get(0) {
             match name {
                 Variable::String(str) => Ok(Some(Variable::Number(str.len() as f32))),
@@ -904,15 +904,15 @@ mod built_in_functions {
                 }))),
             }
         } else {
-            Err(CompilerError::new(format!(
+            Err(MountError::new(format!(
                 "Invalid function call\r\n\tExpected one loaded variable (<str>)"
             )))
         }
     }
 
-    pub fn char_at(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, CompilerError> {
+    pub fn char_at(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, MountError> {
         if loaded_variables.len() != 2 {
-            return Err(CompilerError::new(format!(
+            return Err(MountError::new(format!(
                 "Invalid function call\r\n\tExpected two loaded variables (<str>, <num>)",
             )));
         }
@@ -923,13 +923,13 @@ mod built_in_functions {
             if let Some(result) = as_str.chars().nth(*index as usize) {
                 Ok(Some(Variable::String(result.to_string())))
             } else {
-                Err(CompilerError::new(format!(
+                Err(MountError::new(format!(
                     "Invalid function call\r\n\tCould not index into string at {}",
                     index
                 )))
             }
         } else {
-            Err(CompilerError::new(format!(
+            Err(MountError::new(format!(
                 "Invalid function call\r\n\tExpected two loaded variables (<str>, <num>)\r\n\tFound mismatched types",
             )))
         }
@@ -941,13 +941,13 @@ pub fn execute_function(
     functions: &GlobalFunctions,
     variable_mapping: &mut HashMap<String, Variable>,
     loaded_variables: &mut Vec<Variable>,
-) -> Result<(), CompilerError> {
+) -> Result<(), MountError> {
     if let Some(lines) = functions.get(name) {
         for line in lines {
             let callable: Command = match COMMAND_MAP.get(line.command.as_str()) {
                 Some(n) => *n,
                 None => {
-                    return Err(CompilerError::new(format!(
+                    return Err(MountError::new(format!(
                         "Unknown command: {}",
                         line.command
                     )))
@@ -963,7 +963,7 @@ pub fn execute_function(
             )?;
 
             // if result.is_err() {
-            //     return Err(CompilerError::new(
+            //     return Err(MountError::new(
             //         format!("Error: {:?}", result.err().unwrap()).to_string(),
             //     ));
             // }
@@ -979,9 +979,9 @@ pub fn traverse_lines(
     // command_map: &HashMap<&str, Command>,
     variable_mapping: &mut HashMap<String, Variable>,
     loaded_variables: &mut Vec<Variable>,
-) -> Result<(), CompilerError> {
+) -> Result<(), MountError> {
     if !lines.contains_key("main") {
-        return Err(CompilerError::new("No main function found.".into()));
+        return Err(MountError::new("No main function found.".into()));
     }
 
     let _ = execute_function(
@@ -997,20 +997,20 @@ pub fn traverse_lines(
 pub fn val_or_compiler_error<T, E>(
     result: Result<T, E>,
     message: String,
-) -> Result<T, CompilerError> {
+) -> Result<T, MountError> {
     match result {
         Ok(n) => Ok(n),
-        Err(_) => Err(CompilerError::new(message)),
+        Err(_) => Err(MountError::new(message)),
     }
 }
 
-pub fn next_token<T>(tokens: &mut T) -> Result<String, CompilerError>
+pub fn next_token<T>(tokens: &mut T) -> Result<String, MountError>
 where
     T: Iterator<Item = String>,
 {
     match tokens.next() {
         Some(n) => Ok(n),
-        None => Err(CompilerError::new("Early EOL".into())),
+        None => Err(MountError::new("Early EOL".into())),
     }
 }
 
@@ -1118,7 +1118,7 @@ pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Er
         let command = next_token(&mut tokens)?;
 
         if !COMMAND_MAP.contains_key(&command) {
-            return Err(Box::new(CompilerError::new(
+            return Err(Box::new(MountError::new(
                 format!("Unknown command on line {}: {}", line_n, command).to_owned(),
             )));
         }
@@ -1146,7 +1146,7 @@ pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Er
     Ok(functions)
 }
 
-pub fn read_file(path: &String) -> Result<String, CompilerError> {
+pub fn read_file(path: &String) -> Result<String, MountError> {
     let mut data = String::new();
     let f = val_or_compiler_error(
         File::open(path),

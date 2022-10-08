@@ -24,7 +24,11 @@ function_body = {
 	((tabs ~ (statement)? ~ NEWLINE)*)
 }
 
-statement = { tabs ~ (variable | function) }
+native_capture = { (!"\"" ~ ANY)* }
+
+native = { "native" ~ "\"" ~ native_capture ~ "\"" ~ ";" }
+
+statement = { tabs ~ (variable | function | native) }
 
 b_true = { "true" }
 b_false = { "false" }

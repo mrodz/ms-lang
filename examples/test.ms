@@ -1,3 +1,12 @@
+var a = 5;
+var b = 10;
+
 func main() {
-  var b = (1 + 2 * 3 - 4);
+  var c = 3;
+  var x = ((a + b) % c);
+
+  native "LOAD $x";
+  native "SYSCALLRM Print";
+
+  
 }
