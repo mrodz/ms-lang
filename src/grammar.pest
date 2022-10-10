@@ -39,12 +39,16 @@ native_capture = { (!"\"" ~ ANY)* }
 native = { "native" ~ "\"" ~ native_capture ~ "\"" ~ ";" }
 // END Native statement
 
-statement = { (variable | (function_call ~ ";") | native) }
+statement = { (variable | (function_call ~ ";") | native | if_statement) }
 
 // START If statement
 b_true = { "true" }
 b_false = { "false" }
 boolean = { b_true | b_false }
+
+block = { "{" ~ statement* ~ "}" }
+
+if_statement = { "if" ~ boolean ~ block ~ ("else" ~ (if_statement | block))? }
 // END If statement
 
 // START Math
