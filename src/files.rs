@@ -140,6 +140,7 @@ lazy_static! {
         insert_command!(GTE, gte);
         insert_command!(CAST_NUMBER, cast_number);
         insert_command!(NEGATE, negate);
+        insert_command!(ARG, arg);
 
         command_map
     };
@@ -209,6 +210,44 @@ mod commands {
         }
     }
 
+    pub fn arg(
+        ctx: &Line,
+        variables: &mut VarMapping,
+        loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions
+    ) -> CommandRet {
+      if let (Some(index), Some(dest)) = (ctx.arguments.get(0), ctx.arguments.get(1)) {
+          if let Ok(index) = index.parse::<usize>() {
+              if !dest.starts_with("$") {
+                  return Err(MountError::new(format!(
+                    "Invalid 'ARG' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
+                    ctx.number, dest
+                  ))); 
+              }           
+  
+              match loaded_variables.get(index) {
+                  Some(v) => {
+                      variables.insert(dest.to_string(), v.clone());
+                  }
+                  None => return Err(MountError::new(format!("Index out of bounds on line {}: {index}", ctx.number)))
+              };
+
+              Ok(())
+          } else {
+              Err(MountError::new(
+                    format!("Invalid data types on line {}: Expected <int>", ctx.number)
+                        .to_string(),
+              ))
+          }
+      } else {
+          Err(MountError::new(format!(
+                "Invalid 'ARG' on line {}\r\n\tSyntax --\r\n\tARG index, $dest",
+                ctx.number
+          )))
+      }
+    }
+
     pub fn cast_number(
         ctx: &Line,
         variables: &mut VarMapping,
@@ -273,7 +312,8 @@ mod commands {
 
         if let Some(var) = variables.get(name) {
             if let Variable::Number(n) = var {
-                variables.insert(name.to_string(), Variable::Number(-*n));
+                let inverse = -*n;
+                variables.insert(name.to_string(), Variable::Number(inverse));
 
                 Ok(())
             } else {
