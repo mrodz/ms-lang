@@ -20,6 +20,7 @@ lazy_static! {
     static ref FUNCTION_MAPPING: Mutex<HashMap<String, Vec<String>>> = Mutex::new(HashMap::new());
     static ref GLOBAL_VARS: Mutex<Vec<String>> = Mutex::new(Vec::new());
     static ref LINE_NUMBER: Mutex<u32> = Mutex::new(0);
+    // static ref VAL_INIT_REF: Mutex<String> = Mutex::new(String::new());
 }
 
 macro_rules! gen_seed {
@@ -29,16 +30,16 @@ macro_rules! gen_seed {
     }};
 }
 
-pub(crate) fn eval_math(math: &str, vars: &HashMap<String, String>, destination: &String) -> Result<String> {
+pub(crate) fn eval_math(
+    math: &str,
+    vars: &HashMap<String, String>,
+    destination: &String,
+) -> Result<String> {
     let tt = crate::math::parse(math);
 
     let mut res = Vec::<String>::new();
 
-    fn f(
-        vars: &HashMap<String, String>,
-        res: &mut Vec<String>,
-        bin_op: crate::math::Expr,
-    ) -> () {
+    fn f(vars: &HashMap<String, String>, res: &mut Vec<String>, bin_op: crate::math::Expr) -> () {
         use crate::math::{BinOpKind, Expr};
 
         let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
@@ -76,7 +77,9 @@ pub(crate) fn eval_math(math: &str, vars: &HashMap<String, String>, destination:
                 res.push(format!("NEGATE $__MATH_RESULT__"));
             }
             Expr::Number(n) => {
-                res.push(format!("SET {first_op}, {n}\r\nMOV $__MATH_RESULT__, {first_op}\r\nDROP {first_op}"));
+                res.push(format!(
+                    "SET {first_op}, {n}\r\nMOV $__MATH_RESULT__, {first_op}\r\nDROP {first_op}"
+                ));
             }
             Expr::Variable(name) => {
                 dbg!("2");
@@ -110,39 +113,82 @@ impl Parser {
         todo!("Add function calls");
     }
 
-    fn primary(input: Node) -> Result<String> {
-        unimplemented!();
+    fn val(input: Node) -> Result<String> {
+        let input = input.children().next().unwrap();
 
-        println!("woo");
+        // let seed = gen_seed!();
+        // let new_name = format!("$__VAL_INIT__#{seed}");
 
-        // println!("fin = {}", final_destination.unwrap_or("no".to_string()));
+        // let mut val_init = VAL_INIT_REF.lock().unwrap();
 
-        let mut result = Vec::<String>::new();
+        // *val_init = new_name.to_string();
 
-        let children = input.children();
+        // drop(val_init);
 
-        let mut first_operand = String::new();
+        let vars = VARIABLE_MAPPING.lock().unwrap();
 
-        for child in children {
-            match child.as_rule() {
-                Rule::number => {
-                    first_operand = format!("$__MATH_TEMP__#{}", gen_seed!());
-                    result.push(format!("SET {first_operand}, {}", child.as_str()))
-                }
-                _ => {
-                    println!("{:?}", child.as_rule());
-                    unreachable!()
-                }
+        let rule = input.as_rule();
+
+        let ret = Ok(match rule {
+            Rule::number
+            | Rule::boolean
+            | Rule::string_literal_double
+            | Rule::string_literal_single => {
+                let d = input.as_str().to_string();
+                format!("SET $__VAL_INIT__, {d}")
             }
-        }
 
-        let mut buf = String::new();
+            Rule::function_call => Self::function_call(input)?.to_string(),
+            Rule::ident => {
+                let mut buf = String::new();
 
-        for line in result {
-            buf.push_str(&(line.to_owned() + "\r\n"));
-        }
+                let other = input.as_str();
 
-        Ok(buf)
+                buf.push_str(format!("SET $__VAL_INIT__, 0\r\n").as_str());
+
+                buf = buf + format!("MOV $__VAL_INIT__, {}", vars.get(other).unwrap()).as_str();
+
+                buf
+            }
+            Rule::inline_math => {
+                eval_math(&("(".to_owned() + input.as_str() + ")"), &vars, &"$__VAL_INIT__".to_string())?
+            }
+            Rule::group => eval_math(input.as_str(), &vars, &"$__VAL_INIT__".to_string())?,
+            Rule::array => {
+                let mut buf = String::new();
+                let mut inits = vec![];
+
+                let mut index: usize = 0;
+                drop(vars);
+
+                for var in input.children() {
+                    let result = Self::val(var).unwrap();
+
+                    let temp_id = format!("$__ARR_INIT_{index}__");
+                    inits.push(temp_id.to_string());
+                    index += 1;
+
+                    buf.push_str(
+                        format!(
+                            "SET {temp_id}, 0\r\n{result}\r\nMOV {temp_id}, $__VAL_INIT__\r\n",
+                        )
+                        .as_str(),
+                    );
+
+                }
+
+                let mut array_init = format!("DIM $__VAL_INIT__, ");
+                for init in inits {
+
+                    array_init.push_str(&(init + ","))
+                }
+
+                buf + array_init.as_str()
+            }
+            _ => panic!("undefined rule: {:?}", rule),
+        });
+
+        ret
     }
 
     fn variable(input: Node) -> Result<String> {
@@ -152,55 +198,26 @@ impl Parser {
         let val = parts.next().unwrap();
 
         let seed = gen_seed!();
-        let x = val.children().next().unwrap();
 
         let new_name = format!("${name}_{seed}");
 
+
+        // dbg!(&x);
+        let init = Self::val(val)?;
+
         let mut vars = VARIABLE_MAPPING.lock().unwrap();
-
-        let rule = x.as_rule();
-        let val: String = match rule {
-            Rule::number
-            | Rule::boolean
-            | Rule::string_literal_double
-            | Rule::string_literal_single => {
-                let d = x.as_str().to_string();
-                format!("SET {new_name}, {d}")
-            }
-
-            Rule::function_call => Self::function_call(x)?.to_string(),
-            Rule::ident => {
-                let mut buf = String::new();
-
-                let other = x.as_str();
-
-                buf.push_str(format!("SET {new_name}, 0\r\n").as_str());
-
-                buf = buf + format!("MOV {new_name}, {}", vars.get(other).unwrap()).as_str();
-
-                buf
-            }
-            Rule::inline_math => {
-                eval_math(&("(".to_owned() + x.as_str() + ")"), &vars, &new_name)?
-            },
-            Rule::group => {
-                eval_math(x.as_str(), &vars, &new_name)?
-            },
-
-            _ => panic!("undefined: {:?}", rule),
-        };
+        // let val: String = Self::val(x);
 
         vars.insert(name.to_string(), new_name.to_string());
 
-        Ok(format!("{val}"))
+        Ok(format!(
+            "{init}\r\nSET {new_name}, 0\r\nMOV {new_name}, $__VAL_INIT__",
+            // *VAL_INIT_REF.lock().unwrap()
+        ))
     }
 
     fn native(input: Node) -> Result<String> {
-        let code = input
-            .children()
-            .next()
-            .unwrap()
-            .as_str();
+        let code = input.children().next().unwrap().as_str();
 
         let split = match crate::files::split_string(&code.to_string()) {
             Ok(n) => n,
@@ -232,18 +249,17 @@ impl Parser {
                     }
                 };
 
-                if let Some(compiled_name) = VARIABLE_MAPPING.lock().unwrap().get(interpreted_name) {
-                    dbg!(compiled_name);
-
+                if let Some(compiled_name) = VARIABLE_MAPPING.lock().unwrap().get(interpreted_name)
+                {
                     buf.push_str(&(compiled_name.to_owned() + " "));
                 } else {
                     return Err(pest_consume::Error::new_from_span(
                         ErrorVariant::ParsingError {
                             positives: vec![Rule::native],
                             negatives: vec![],
-                        }, 
-                        input.as_span()
-                    ))
+                        },
+                        input.as_span(),
+                    ));
                 }
             } else {
                 buf.push_str(&(token + " "));
@@ -353,7 +369,6 @@ pub fn compile(path: &String) -> Result<()> {
     use crate::files::read_file;
 
     let fio = read_file(path).unwrap();
-    // println!("{}", fio);
 
     let mut i = path.len();
     let chars = path.chars().rev();

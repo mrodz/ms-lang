@@ -1,9 +1,9 @@
-var hello = "Hello World!";
-var a = -13;
+var pi = 3.141592;
+var xy = [pi, true, false];
 
 func main() {
-  var b = 2;
-  var c = (-(a * b));
-  native "LOAD $c";
+  var a = [1, 2, pi, xy, [["a", "b"], "c"]];
+
+  native "LOAD $a";
   native "SYSCALLRM PrintLn";
 }

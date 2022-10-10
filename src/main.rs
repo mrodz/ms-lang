@@ -29,4 +29,19 @@ fn main() {
 
         let _ = files::run_program(&"examples/test.mmm".to_string());
     }
+
+    if !settings.0 && !settings.1 {
+        let _ = files::run_program(&"examples/compiled/program.mmm".to_string());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn split_string() {
+        let message = "DIM $x, \"aa\", \"bb\", \"cc\", \"dd\"";
+        let res = crate::files::split_string(&message.to_string()).unwrap();
+
+        assert_eq!(res, vec!["DIM", "$x", "aa", "bb", "cc", "dd"]);
+    }
 }

@@ -1,9 +1,11 @@
 // START Constants
 alpha = { 'a'..'z' | 'A'..'Z' }
 digit = { '0'..'9' }
+quote_d = { "\"" }
+quote_s = { "'" }
 underscore = { "_" }
 
-WHITESPACE = _{ " " }
+WHITESPACE = _{ " " | NEWLINE }
 COMMENT = _{ "//" }
 // END Constants
 
@@ -13,10 +15,10 @@ COMMENT = _{ "//" }
 ident = @{ !digit ~ (alpha | digit | underscore)+ }
 
 // START Strings
-string_literal_inner_d = { ((!"\"") ~ ANY)* }
-string_literal_double = @{ "\"" ~ string_literal_inner_d ~ "\"" }
-string_literal_inner_s = { ((!"'") ~ ANY)* }
-string_literal_single = @{ "'" ~ string_literal_inner_s ~ "'" }
+string_literal_inner_d = { ((!quote_d) ~ ANY)* }
+string_literal_double = @{ quote_d ~ string_literal_inner_d ~ quote_d }
+string_literal_inner_s = { ((!quote_s) ~ ANY)* }
+string_literal_single = @{ quote_s ~ string_literal_inner_s ~ quote_s }
 // END Strings
 
 // START Functions
@@ -28,7 +30,7 @@ function_arguments = { (ident ~ ("," ~ ident)*)? }
 function = { "func" ~ ident ~ "(" ~ function_arguments ~ ")" ~ "{" ~ function_body ~ "}"}
 
 function_body = {
-	((tabs ~ (statement)? ~ NEWLINE)*)
+	(((statement))*)
 }
 // END Functions
 
@@ -37,7 +39,7 @@ native_capture = { (!"\"" ~ ANY)* }
 native = { "native" ~ "\"" ~ native_capture ~ "\"" ~ ";" }
 // END Native statement
 
-statement = { tabs ~ (variable | (function_call ~ ";") | native) }
+statement = { (variable | (function_call ~ ";") | native) }
 
 // START If statement
 b_true = { "true" }
@@ -58,16 +60,19 @@ prefix  =  { "-" }
 primary = _{ ((number) | ident) | "(" ~ group ~ ")" }
 // END Math
 
-val = { inline_math | primary | boolean | (string_literal_double | string_literal_single) | function_call | ident }
+
+array = { "[" ~ ((val ~ ",")* ~ val)? ~ "]" }
+
+val = { boolean | array | inline_math | primary | boolean | (string_literal_double | string_literal_single) | function_call | ident }
 
 variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
 
 declarations = { variable | function }
 
-tabs = _{ ("\t"*) }
+// tabs = _{ ("\t"*) }
 
 file = {
     SOI ~
-    ((tabs ~ (declarations)? ~ NEWLINE)*) ~
+    (((declarations))*) ~
     EOI
 }

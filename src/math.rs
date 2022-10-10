@@ -49,7 +49,6 @@ where
     // Query information about an operator (Affix, Precedence, Associativity)
     fn query(&mut self, tree: &Self::Input) -> Result<Affix> {
         let rule = tree.as_rule();
-        println!("rule = {:?}", rule);
         let affix = match (rule, tree.as_str()) {
             (Rule::infix, "=") => Affix::Infix(Precedence(2), Associativity::Neither),
             (Rule::infix, "+") => Affix::Infix(Precedence(3), Associativity::Left),
@@ -77,7 +76,6 @@ where
         let expr = match rule {
             Rule::number => {
                 let str = tree.as_str().trim();
-                println!("\t\t@ `{}`", str);
 
                 let str_f32 = str.parse().unwrap();
                 Expr::Number(str_f32)

@@ -1,14 +1,14 @@
 use lazy_static::lazy_static;
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read};
-use std::str::{Lines};
+use std::str::Lines;
 
 use self::command_types::{Command, GlobalFunctions};
 
 mod command_types {
-    use super::{MountError, Line, Variable};
+    use super::{Line, MountError, Variable};
     use std::collections::HashMap;
 
     pub type VarMapping = HashMap<String, Variable>;
@@ -37,14 +37,35 @@ pub enum Variable {
     Number(f32),
     String(String),
     Boolean(bool),
+    Dim(Vec<Variable>),
 }
 
 impl Variable {
     fn to_string(&self, append_type: bool) -> String {
         match self {
-            Self::Number(n) => format!("{}{}", if append_type { "<number> " } else { "" }, n),
-            Self::Boolean(b) => format!("{}{}", if append_type { "<bool> " } else { "" }, b),
-            Self::String(s) => format!("{}{}", if append_type { "<str> " } else { "" }, s),
+            Self::Number(n) => format!("{}", n),
+            Self::Boolean(b) => format!("{}", b),
+            Self::String(s) => format!("{}{}{}", if append_type { "\"" } else { "" }, s, if append_type { "\"" } else { "" }),
+            Self::Dim(d) => {
+                let mut res = String::from("[");
+
+                let mut c = 0;
+                for var in d {
+                    c += 1;
+                    let temp = var.to_string(true);
+
+                    res.push_str(temp.as_str());
+                    res.push_str(", ");
+                }
+
+                let actual = (if c > 0 {
+                    res.get(0..res.len() - 2).unwrap()
+                } else {
+                    res.as_str()
+                }).to_owned() + "]";
+
+                actual
+            }
         }
     }
 }
@@ -88,6 +109,7 @@ lazy_static! {
         }
 
         insert_command!(SET, set);
+        insert_command!(DIM, dim);
         insert_command!(LOAD, load);
         insert_command!(SYSCALL, call);
         insert_command!(SYSCALLRM, call_d);
@@ -173,8 +195,8 @@ mod commands {
     use super::command_types::*;
     use super::execute_function;
     use super::var_from_str;
-    use super::MountError;
     use super::Line;
+    use super::MountError;
     use super::Variable;
 
     pub fn var_exists<'a>(
@@ -183,9 +205,7 @@ mod commands {
     ) -> Result<&'a super::Variable, MountError> {
         match variables.get(name) {
             Some(v) => Ok(v),
-            None => Err(MountError::new(format!(
-                "Variable {name} is not in scope."
-            ))),
+            None => Err(MountError::new(format!("Variable {name} is not in scope."))),
         }
     }
 
@@ -206,12 +226,16 @@ mod commands {
                             maybe_var
                         } else {
                             return Err(MountError::new(format!(
-                    "Invalid 'CAST_N' on line {}\r\n\tVariable cannot be cast to a number\r\n\tFound {}",
+                    "Invalid 'CAST_N' on line {}\r\n\tVariable cannot be cast to a number\r\n\t`{}` cannot be coerced.",
                     ctx.number, name
                 )));
                         }
                     }
                     Variable::Number(n) => Variable::Number(*n),
+                    _ => return Err(MountError::new(format!(
+                        "Invalid 'CAST_N' on line {}\r\n\tVariable cannot be cast to a number\r\n\t`{}` cannot be coerced.",
+                        ctx.number, name
+                    )))
                 };
 
                 variables.insert(name.to_string(), result);
@@ -236,14 +260,14 @@ mod commands {
         variables: &mut VarMapping,
         _: &mut LoadedVars,
         _function_context: &FunctionContext,
-        _functions: &GlobalFunctions
+        _functions: &GlobalFunctions,
     ) -> CommandRet {
         if ctx.arguments.len() != 1 {
             return Err(MountError::new(format!(
                 "Invalid 'NEGATE' on line {}\r\n\tSyntax --\r\n\tNEGATE $VarName",
                 ctx.number
-            )))
-        } 
+            )));
+        }
 
         let name = ctx.arguments.get(0).unwrap();
 
@@ -256,14 +280,63 @@ mod commands {
                 return Err(MountError::new(
                     format!("Invalid data types on line {}: Expected <int>", ctx.number)
                         .to_string(),
-                ))
+                ));
             }
         } else {
             return Err(MountError::new(format!(
                 "Variable '{}' has not been declared, but it is referenced on line {}",
                 name, ctx.number
-            )))
+            )));
         }
+    }
+
+    pub fn dim(
+        ctx: &Line,
+        variables: &mut VarMapping,
+        _: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions,
+    ) -> CommandRet {
+        // let args = &ctx.arguments;
+        // let len = args.len();
+        // dbg!((len < 1));
+        if ctx.arguments.len() >= 1 {
+            let name = ctx.arguments.get(0).unwrap();
+            if let Some('$') = name.chars().next() {
+                let mut vars = vec![];
+
+                if ctx.arguments.len() > 1 {
+                    for maybe_value in ctx.arguments.get(1..).unwrap() {
+                        if maybe_value.starts_with("$") {
+                            if let Some(var) = variables.get(maybe_value) {
+                                vars.push(var.clone());
+                            } else {
+                                return Err(MountError::new(format!(
+                                    "Variable '{}' has not been declared, but it is referenced on line {}",
+                                    maybe_value, ctx.number
+                                )));
+                            }
+                        } else {
+                            let value = var_from_str(maybe_value.to_string());
+                            vars.push(value);
+                        }
+                    }
+                }
+
+                variables.insert(name.to_string(), Variable::Dim(vars));
+            } else {
+                return Err(MountError::new(format!(
+                    "Invalid 'DIM' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
+                    ctx.number, name
+                )));
+            }
+        } else {
+            return Err(MountError::new(format!(
+                "Invalid 'DIM' on line {}\r\n\tSyntax --\r\n\tDIM $VarName, VALUES...",
+                ctx.number
+            )));
+        }
+        Ok(())
     }
 
     pub fn set(
@@ -357,6 +430,8 @@ mod commands {
             "CharAt" => built_in_functions::char_at,
             "StrLen" => built_in_functions::str_len,
             "Input" => built_in_functions::input,
+            "DimLen" => built_in_functions::dim_len,
+            "DimAt" => built_in_functions::dim_at,
             _ => {
                 return Err(MountError::new(format!(
                     "{} is not a native function.",
@@ -823,11 +898,14 @@ mod built_in_functions {
         let mut string_buf = String::new();
 
         for var in loaded_variables {
+            // dbg!(&var.to_string());
             string_buf.push_str(&var.to_string());
             string_buf.push(' ');
         }
 
-        print!("{}", string_buf.trim_end());
+        let trimmed = string_buf.trim_end();
+
+        print!("{}", trimmed);
 
         Ok(None)
     }
@@ -903,10 +981,30 @@ mod built_in_functions {
                         5f32
                     }
                 }))),
+                _ => return Err(MountError::new(format!(
+                    "Invalid function call\r\n\tVariable cannot be cast to a number\r\n\t`{:?}` cannot be coerced.",
+                    name
+                )))
             }
         } else {
             Err(MountError::new(format!(
-                "Invalid function call\r\n\tExpected one loaded variable (<str>)"
+                "Invalid function call\r\n\tExpected one loaded variable (<str> | <number> | <bool>)"
+            )))
+        }
+    }
+
+    pub fn dim_len(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, MountError> {
+        if let Some(name) = loaded_variables.get(0) {
+            match name {
+                Variable::Dim(d) => Ok(Some(Variable::Number(d.len() as f32))),
+                _ => return Err(MountError::new(format!(
+                    "Invalid function call\r\n\tVariable is not a dim\r\n\t`{:?}` cannot be coerced.",
+                    name
+                )))
+            }
+        } else {
+            Err(MountError::new(format!(
+                "Invalid function call\r\n\tExpected one loaded variable (<dim>)"
             )))
         }
     }
@@ -926,6 +1024,31 @@ mod built_in_functions {
             } else {
                 Err(MountError::new(format!(
                     "Invalid function call\r\n\tCould not index into string at {}",
+                    index
+                )))
+            }
+        } else {
+            Err(MountError::new(format!(
+                "Invalid function call\r\n\tExpected two loaded variables (<str>, <num>)\r\n\tFound mismatched types",
+            )))
+        }
+    }
+
+    pub fn dim_at(loaded_variables: &mut LoadedVars) -> Result<Option<Variable>, MountError> {
+        if loaded_variables.len() != 2 {
+            return Err(MountError::new(format!(
+                "Invalid function call\r\n\tExpected two loaded variables (<str>, <num>)",
+            )));
+        }
+
+        if let (Some(Variable::Dim(as_dim)), Some(Variable::Number(index))) =
+            (loaded_variables.get(0), loaded_variables.get(1))
+        {
+            if let Some(result) = as_dim.get(*index as usize) {
+                Ok(Some(result.clone()))
+            } else {
+                Err(MountError::new(format!(
+                    "Invalid function call\r\n\tCould not index into dim at {}",
                     index
                 )))
             }
@@ -995,10 +1118,7 @@ pub fn traverse_lines(
     Ok(())
 }
 
-pub fn val_or_compiler_error<T, E>(
-    result: Result<T, E>,
-    message: String,
-) -> Result<T, MountError> {
+pub fn val_or_compiler_error<T, E>(result: Result<T, E>, message: String) -> Result<T, MountError> {
     match result {
         Ok(n) => Ok(n),
         Err(_) => Err(MountError::new(message)),
@@ -1022,12 +1142,14 @@ pub fn split_string(string: &String) -> Result<Vec<String>, String> {
     let mut escaping = false;
 
     for char in string.chars() {
-        if char.is_whitespace() && !in_quotes {
-            if buf.len() != 0 {
-                result.push(buf.to_string());
-                buf.clear();
+        if !in_quotes {
+            if char == ' ' || char == ',' {
+                if buf.len() != 0 {
+                    result.push(buf.to_string());
+                    buf.clear();
+                }
+                continue;
             }
-            continue;
         }
 
         match char {
@@ -1036,6 +1158,13 @@ pub fn split_string(string: &String) -> Result<Vec<String>, String> {
                     buf.push(char);
                 }
                 escaping = !escaping;
+                continue;
+            }
+            ',' => {
+                if escaping {
+                    buf.push(char);
+                    escaping = !escaping;
+                }
                 continue;
             }
             '"' => {
@@ -1074,6 +1203,7 @@ pub fn split_string(string: &String) -> Result<Vec<String>, String> {
             }
         }
 
+        // println!("$ {char}");
         buf.push(char);
     }
 
@@ -1124,19 +1254,19 @@ pub fn map_lines(lines: Lines) -> Result<GlobalFunctions, Box<dyn std::error::Er
             )));
         }
 
-        let mut arguments = Vec::new();
-        for argument in tokens {
-            let mut argument = argument.to_string();
-            if let Some(',') = argument.chars().next_back() {
-                argument.pop();
-            }
-            arguments.push(argument);
-        }
+        // let mut arguments = Vec::new();
+        // for argument in tokens {
+        //     let argument = argument.to_string();
+        //     // if let Some(',') = argument.chars().next_back() {
+        //         // argument.pop();
+        //     // }
+        //     arguments.push(argument);
+        // }
 
         result.push(Line {
             number: line_n - 1,
             command: command.to_string(),
-            arguments: arguments,
+            arguments: tokens.collect(),
         })
     }
 
