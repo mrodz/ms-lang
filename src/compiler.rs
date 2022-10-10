@@ -20,7 +20,7 @@ lazy_static! {
     static ref FUNCTION_MAPPING: Mutex<HashMap<String, Vec<String>>> = Mutex::new(HashMap::new());
     static ref GLOBAL_VARS: Mutex<Vec<String>> = Mutex::new(Vec::new());
     static ref LINE_NUMBER: Mutex<u32> = Mutex::new(0);
-    // static ref VAL_INIT_REF: Mutex<String> = Mutex::new(String::new());
+    static ref VAL_INIT_REF: Mutex<String> = Mutex::new(String::new());
 }
 
 macro_rules! gen_seed {
@@ -116,14 +116,14 @@ impl Parser {
     fn val(input: Node) -> Result<String> {
         let input = input.children().next().unwrap();
 
-        // let seed = gen_seed!();
-        // let new_name = format!("$__VAL_INIT__#{seed}");
+        let seed = gen_seed!();
+        let new_name = format!("$__VAL_INIT__#{seed}");
 
-        // let mut val_init = VAL_INIT_REF.lock().unwrap();
+        let mut val_init = VAL_INIT_REF.lock().unwrap();
 
-        // *val_init = new_name.to_string();
+        *val_init = new_name.to_string();
 
-        // drop(val_init);
+        drop(val_init);
 
         let vars = VARIABLE_MAPPING.lock().unwrap();
 
@@ -135,7 +135,7 @@ impl Parser {
             | Rule::string_literal_double
             | Rule::string_literal_single => {
                 let d = input.as_str().to_string();
-                format!("SET $__VAL_INIT__, {d}")
+                format!("SET {new_name}, {d}")
             }
 
             Rule::function_call => Self::function_call(input)?.to_string(),
@@ -144,16 +144,16 @@ impl Parser {
 
                 let other = input.as_str();
 
-                buf.push_str(format!("SET $__VAL_INIT__, 0\r\n").as_str());
+                buf.push_str(format!("SET {new_name}, 0\r\n").as_str());
 
-                buf = buf + format!("MOV $__VAL_INIT__, {}", vars.get(other).unwrap()).as_str();
+                buf = buf + format!("MOV {new_name}, {}", vars.get(other).unwrap()).as_str();
 
                 buf
             }
             Rule::inline_math => {
-                eval_math(&("(".to_owned() + input.as_str() + ")"), &vars, &"$__VAL_INIT__".to_string())?
+                eval_math(&("(".to_owned() + input.as_str() + ")"), &vars, &new_name)?
             }
-            Rule::group => eval_math(input.as_str(), &vars, &"$__VAL_INIT__".to_string())?,
+            Rule::group => eval_math(input.as_str(), &vars, &new_name)?,
             Rule::array => {
                 let mut buf = String::new();
                 let mut inits = vec![];
@@ -161,29 +161,34 @@ impl Parser {
                 let mut index: usize = 0;
                 drop(vars);
 
+                let seed = gen_seed!();
+                let dest = format!("$__VAL_INIT__#{seed}");
+
                 for var in input.children() {
                     let result = Self::val(var).unwrap();
 
-                    let temp_id = format!("$__ARR_INIT_{index}__");
+                    let temp_id = format!("$__ARR_INIT_{index}@{seed}__");
                     inits.push(temp_id.to_string());
                     index += 1;
 
+                    let c = VAL_INIT_REF.lock().unwrap();
+
                     buf.push_str(
-                        format!(
-                            "SET {temp_id}, 0\r\n{result}\r\nMOV {temp_id}, $__VAL_INIT__\r\n",
-                        )
-                        .as_str(),
+                        format!("SET {temp_id}, 0\r\n{result}\r\nMOV {temp_id}, {c}\r\n",).as_str(),
                     );
-
                 }
 
-                let mut array_init = format!("DIM $__VAL_INIT__, ");
+                let mut array_init = format!("DIM {dest}, ");
+                let mut cleanup = String::from("\r\n");
+
+                *VAL_INIT_REF.lock().unwrap() = dest;
+                
                 for init in inits {
-
-                    array_init.push_str(&(init + ","))
+                    array_init.push_str(&(init.to_owned() + ","));
+                    cleanup.push_str(&("DROP ".to_owned() + init.as_str() + "\r\n"));
                 }
 
-                buf + array_init.as_str()
+                buf + array_init.as_str() + cleanup.as_str()
             }
             _ => panic!("undefined rule: {:?}", rule),
         });
@@ -192,7 +197,6 @@ impl Parser {
     }
 
     fn variable(input: Node) -> Result<String> {
-        println!("varrrr!");
         let mut parts = input.children();
         let name = parts.next().unwrap().as_str();
         let val = parts.next().unwrap();
@@ -200,7 +204,6 @@ impl Parser {
         let seed = gen_seed!();
 
         let new_name = format!("${name}_{seed}");
-
 
         // dbg!(&x);
         let init = Self::val(val)?;
@@ -211,8 +214,8 @@ impl Parser {
         vars.insert(name.to_string(), new_name.to_string());
 
         Ok(format!(
-            "{init}\r\nSET {new_name}, 0\r\nMOV {new_name}, $__VAL_INIT__",
-            // *VAL_INIT_REF.lock().unwrap()
+            "{init}\r\nSET {new_name}, 0\r\nMOV {new_name}, {}",
+            *VAL_INIT_REF.lock().unwrap()
         ))
     }
 

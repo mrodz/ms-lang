@@ -1,9 +1,9 @@
+var a = "Hello World!";
 var pi = 3.141592;
-var xy = [pi, true, false];
 
 func main() {
-  var a = [1, 2, pi, xy, [["a", "b"], "c"]];
+  var my_array = [1, 2, a, pi, ["woo", "back", [["baby"]]]];
 
-  native "LOAD $a";
+  native "LOAD $my_array";
   native "SYSCALLRM PrintLn";
 }
