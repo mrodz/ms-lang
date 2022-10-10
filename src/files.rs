@@ -141,6 +141,7 @@ lazy_static! {
         insert_command!(CAST_NUMBER, cast_number);
         insert_command!(NEGATE, negate);
         insert_command!(ARG, arg);
+        insert_command!(AT, at);
 
         command_map
     };
@@ -210,6 +211,60 @@ mod commands {
         }
     }
 
+    pub fn at(
+        ctx: &Line,
+        variables: &mut VarMapping,
+        _loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions
+    ) -> CommandRet {
+      if let (Some(var), Some(index), Some(dest)) = (ctx.arguments.get(0), ctx.arguments.get(1), ctx.arguments.get(2)) {
+          if let Ok(index) = index.parse::<usize>() {
+              if !dest.starts_with("$") {
+                  return Err(MountError::new(format!(
+                    "Invalid 'ARG' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
+                    ctx.number, dest
+                  ))); 
+              }           
+
+              if let Some(d) = variables.get(var) {
+                  if let Variable::Dim(d) = d {
+                      match d.get(index) {
+                          Some(v) => {
+                              let cloned = v.clone();
+                              variables.insert(dest.to_string(), cloned);
+                          }
+                          None => return Err(MountError::new(format!("Index out of bounds on line {}: {index}", ctx.number)))
+                      }
+
+                      Ok(())
+                  } else {
+                    Err(MountError::new(
+                    format!("Invalid data types on line {}: Expected <dim>", ctx.number)
+                        .to_string(),
+              ))
+                  }      
+              } else {
+                return Err(MountError::new(format!(
+                "Variable '{}' has not been declared, but it is referenced on line {}",
+                var, ctx.number
+            )))
+              }
+          } else {
+              Err(MountError::new(
+                    format!("Invalid data types on line {}: Expected <int>", ctx.number)
+                        .to_string(),
+              ))
+          }
+      } else {
+          Err(MountError::new(format!(
+                "Invalid 'AT' on line {}\r\n\tSyntax --\r\n\tAT $DimName, index, $dest",
+                ctx.number
+          )))
+      }
+    }
+
+
     pub fn arg(
         ctx: &Line,
         variables: &mut VarMapping,
@@ -236,8 +291,7 @@ mod commands {
               Ok(())
           } else {
               Err(MountError::new(
-                    format!("Invalid data types on line {}: Expected <int>", ctx.number)
-                        .to_string(),
+                    format!("Invalid data types on line {}: Expected <int>", ctx.number),
               ))
           }
       } else {
