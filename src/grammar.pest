@@ -46,9 +46,9 @@ b_true = { "true" }
 b_false = { "false" }
 boolean = { b_true | b_false }
 
-boolean_infix = { "and" | "or" | "xor" }
-boolean_prefix = { "not" }
-boolean_group = { boolean_prefix* ~ boolean_primary ~ (boolean_infix ~ prefix* ~ boolean_primary) }
+boolean_infix = { "&&" | "||" | "^" }
+boolean_prefix = { "!" }
+boolean_group = { boolean_prefix* ~ boolean_primary ~ (boolean_infix ~ boolean_prefix* ~ boolean_primary) }
 boolean_primary = _{ ((boolean) | ident) | "(" ~ boolean_group ~ ")" }
 inline_boolean = { ((boolean) | ident) ~ (boolean_infix ~ ((boolean) | ident))+ }
 

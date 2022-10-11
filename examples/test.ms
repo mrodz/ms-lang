@@ -1,5 +1,5 @@
 func main() {
-  var b = true and false;
+  var b = true && false;
   native "LOAD $b";
   native "SYSCALLRM PrintLn";
 }

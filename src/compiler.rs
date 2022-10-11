@@ -30,6 +30,80 @@ macro_rules! gen_seed {
     }};
 }
 
+pub(crate) fn eval_boolean(
+    math: &str,
+    vars: &HashMap<String, String>,
+    destination: &String,
+) -> Result<String> {
+    let tt = crate::bools::parse(math);
+
+    let mut res = Vec::<String>::new();
+
+    fn f(vars: &HashMap<String, String>, res: &mut Vec<String>, bin_op: crate::bools::BoolExpr) -> () {
+        use crate::bools::{BinOpKind, BoolExpr as Expr};
+
+        let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
+
+        match bin_op {
+            Expr::BinOp(first, op, second) => {
+                let cmd = match op {
+                    BinOpKind::And => "ADD",
+                    BinOpKind::Or => "OR",
+                    BinOpKind::Xor => "XOR",
+                };
+
+                res.push(format!("SET {first_op}, 0"));
+                f(vars, res, *first);
+                res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
+
+                let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
+
+                res.push(format!("SET {second_op}, 0"));
+                f(vars, res, *second);
+
+                res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
+
+                res.push(format!("MOV $__MATH_RESULT__, {first_op}"));
+
+                res.push(format!("{cmd} $__MATH_RESULT__, {second_op}"));
+
+                res.push(format!("DROP {first_op}\r\nDROP {second_op}"));
+            }
+            Expr::UnOp(_, expr) => {
+                f(vars, res, *expr);
+
+                res.push(format!("NOT $__MATH_RESULT__"));
+            }
+            Expr::Boolean(n) => {
+                res.push(format!(
+                    "SET {first_op}, {n}\r\nMOV $__MATH_RESULT__, {first_op}\r\nDROP {first_op}"
+                ));
+            }
+            Expr::Variable(name) => {
+                dbg!("2");
+                let reference = vars.get(&name).unwrap();
+
+                println!("decl var {}", reference);
+                res.push(format!("MOV $__MATH_RESULT__, {}", reference));
+            }
+        }
+    }
+
+    f(&vars, &mut res, tt);
+    res.push(format!(
+        "SET {destination}, 0\r\nMOV {destination}, $__MATH_RESULT__"
+    ));
+
+    let mut buf = String::new();
+
+    for line in res {
+        buf.push_str(&(line.to_owned() + "\r\n"))
+    }
+
+    Ok(buf)
+}
+
+
 pub(crate) fn eval_math(
     math: &str,
     vars: &HashMap<String, String>,
@@ -39,13 +113,13 @@ pub(crate) fn eval_math(
 
     let mut res = Vec::<String>::new();
 
-    fn f(vars: &HashMap<String, String>, res: &mut Vec<String>, bin_op: crate::math::Expr) -> () {
-        use crate::math::{BinOpKind, Expr};
+    fn f(vars: &HashMap<String, String>, res: &mut Vec<String>, bin_op: crate::math::MathExpr) -> () {
+        use crate::math::{BinOpKind, MathExpr};
 
         let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
 
         match bin_op {
-            Expr::BinOp(first, op, second) => {
+            MathExpr::BinOp(first, op, second) => {
                 let cmd = match op {
                     BinOpKind::Add => "ADD",
                     BinOpKind::Sub => "SUB",
@@ -71,17 +145,17 @@ pub(crate) fn eval_math(
 
                 res.push(format!("DROP {first_op}\r\nDROP {second_op}"));
             }
-            Expr::UnOp(_, expr) => {
+            MathExpr::UnOp(_, expr) => {
                 f(vars, res, *expr);
 
                 res.push(format!("NEGATE $__MATH_RESULT__"));
             }
-            Expr::Number(n) => {
+            MathExpr::Number(n) => {
                 res.push(format!(
                     "SET {first_op}, {n}\r\nMOV $__MATH_RESULT__, {first_op}\r\nDROP {first_op}"
                 ));
             }
-            Expr::Variable(name) => {
+            MathExpr::Variable(name) => {
                 dbg!("2");
                 let reference = vars.get(&name).unwrap();
 
@@ -211,6 +285,12 @@ impl Parser {
               // "REM array index".to_string();
 
               format!("{result}MOV {new_name}, $__INDEXING_TEMP__")
+            }
+            Rule::boolean_group => {
+                eval_boolean(input.as_str(), &vars, &new_name)?
+            }
+            Rule::inline_boolean => {
+                eval_boolean(&("(".to_owned() + input.as_str() + ")"), &vars, &new_name)?
             }
             _ => panic!("undefined rule: {:?}", rule),
         });
