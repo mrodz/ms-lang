@@ -144,9 +144,9 @@ impl Parser {
 
                 let other = input.as_str();
 
-                buf.push_str(format!("SET {new_name}, 0\r\n").as_str());
+                // buf.push_str(format!("SET {new_name}, 0\r\n").as_str());
 
-                buf = buf + format!("MOV {new_name}, {}", vars.get(other).unwrap()).as_str();
+                buf = buf + format!("MOV {new_name}, {}\r\n", vars.get(other).unwrap()).as_str();
 
                 buf
             }
@@ -189,6 +189,28 @@ impl Parser {
                 }
 
                 buf + array_init.as_str() + cleanup.as_str()
+            }
+            Rule::array_index => {
+              let mut children = input.children();
+
+              let ident = children.next().unwrap().as_str();
+
+              let mut result = format!("SET $__INDEXING_TEMP__, 0\r\nMOV $__INDEXING_TEMP__, {}\r\n", vars.get(ident).unwrap());
+              
+              loop {
+                let index = match children.next() {
+                  Some(s) => s.as_str(),
+                  None => break
+                };
+                
+                result.push_str(format!("AT $__INDEXING_TEMP__, {index}, $__INDEXING_TEMP__\r\n").as_str());
+              }
+              
+              // dbg!(ident);
+              
+              // "REM array index".to_string();
+
+              format!("{result}MOV {new_name}, $__INDEXING_TEMP__")
             }
             _ => panic!("undefined rule: {:?}", rule),
         });

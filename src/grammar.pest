@@ -67,7 +67,11 @@ primary = _{ ((number) | ident) | "(" ~ group ~ ")" }
 
 array = { "[" ~ ((val ~ ",")* ~ val)? ~ "]" }
 
-val = { boolean | array | inline_math | primary | boolean | (string_literal_double | string_literal_single) | function_call | ident }
+array_index_num = { ASCII_DIGIT{1,} }
+
+array_index = { ident ~ ("[" ~ array_index_num ~ "]"){1,} }
+
+val = { array_index | boolean | array | inline_math | primary | boolean | (string_literal_double | string_literal_single) | function_call | ident }
 
 variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
 

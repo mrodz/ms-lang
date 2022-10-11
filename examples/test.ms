@@ -1,13 +1,7 @@
-var a = "Hello World!";
-var pi = 3.141592;
-
 func main() {
-  var my_array = [1, 2, a, pi, ["woo", "back", [["baby"]]]];
+  var my_array = [1, ["a", "b"]];
+  var elem = my_array[1][1];
 
-  if true {
-    native "LOAD $my_array";
-    native "SYSCALLRM PrintLn";
-  } else if true {
-    var b = 5;
-  }
+  native "LOAD $elem";
+  native "SYSCALLRM PrintLn";
 }

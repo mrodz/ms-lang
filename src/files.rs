@@ -931,7 +931,13 @@ mod commands {
 
         let var1_name = ctx.arguments.get(0).unwrap();
 
-        let _ = var_exists(var1_name, variables).unwrap();
+        // let _ = var_exists(var1_name, variables)?;
+        if !var1_name.starts_with('$') {
+          return Err(MountError::new(format!(
+                    "Invalid 'MOV' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
+                    ctx.number, var1_name
+                  )));
+        }
 
         let var2 = var_exists(ctx.arguments.get(1).unwrap(), variables)
             .unwrap()
