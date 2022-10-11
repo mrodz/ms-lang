@@ -1,7 +1,5 @@
 func main() {
-  var my_array = [1, ["a", "b"]];
-  var elem = my_array[1][1];
-
-  native "LOAD $elem";
+  var b = true and false;
+  native "LOAD $b";
   native "SYSCALLRM PrintLn";
 }
