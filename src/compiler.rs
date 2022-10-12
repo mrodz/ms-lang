@@ -15,12 +15,102 @@ type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 #[grammar = "grammar.pest"]
 struct Parser;
 
+#[derive(Debug)]
+struct StackFrame {
+  name: String,
+  variables: HashMap<String, String>,
+  depth: usize
+}
+
+impl StackFrame {
+  pub fn new(name: &str, inherit_from: usize) -> Self {
+    // let stack = CALL_STACK.lock().unwrap();
+    // let active_vars = stack.get(stack.len() - 1).unwrap().variables;
+    // let cloned = active_vars.clone();
+    
+    Self {
+      name: name.to_string(),
+      variables: HashMap::new(),
+      depth: inherit_from
+    }
+  }
+
+  pub fn add_var(&mut self, scope_name: String, compiled_name: String) {
+    self.variables.insert(scope_name, compiled_name);
+  }
+
+  pub fn find_compiled_name(&self, scope_name: &String, stack: &Vec<StackFrame>) -> Option<String> {
+    
+    for i in (0..=self.depth).rev() {
+      dbg!(i);
+      match stack.get(i).unwrap().variables.get(scope_name) {
+        Some(name) => return Some(name.to_string()),
+        None => continue
+      }
+    }
+
+    None
+    // self.variables.get(scope_name)
+  }
+}
+
 lazy_static! {
-    static ref VARIABLE_MAPPING: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
+    // static ref VARIABLE_MAPPING: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
     static ref FUNCTION_MAPPING: Mutex<HashMap<String, Vec<String>>> = Mutex::new(HashMap::new());
     static ref GLOBAL_VARS: Mutex<Vec<String>> = Mutex::new(Vec::new());
     static ref LINE_NUMBER: Mutex<u32> = Mutex::new(0);
     static ref VAL_INIT_REF: Mutex<String> = Mutex::new(String::new());
+    static ref CALL_STACK: Mutex<Vec<StackFrame>> = Mutex::new(Vec::new());
+}
+
+// fn top_frame<'a>(stack: &'a Vec<StackFrame>) -> &'a StackFrame {
+//   stack.get(stack.len() - 1).unwrap()
+// }
+
+fn push_frame(name: &str) {
+  let mut stack = CALL_STACK.lock().unwrap();
+
+  let len = stack.len();
+
+  // let top = stack.get(len - 1).unwrap();
+  
+  stack.push(StackFrame::new(name, len));
+}
+
+fn pop_frame() {
+  CALL_STACK.lock().unwrap().pop();
+}
+
+fn add_var_to_scope(name: String, compiled_name: String) {
+  let mut stack = CALL_STACK.lock().unwrap();
+  let i = stack.len() - 1;
+  let top: &mut StackFrame = stack.get_mut(i).unwrap();
+
+  top.add_var(name, compiled_name);
+
+  drop(stack);
+  
+}
+
+fn get_var_from_scope(name: &String) -> Option<String> {
+  dbg!('a');
+  let mut stack = CALL_STACK.lock().unwrap();
+  dbg!('b');
+  
+  let i = stack.len() - 1;
+  let top: &StackFrame = stack.get(i).unwrap();
+
+  dbg!('c');
+  let result = match top.find_compiled_name(name, &stack) {
+    Some(str) => Some(str.to_string()),
+    None => None
+  };
+  dbg!('d');
+
+  drop(stack);
+  dbg!(&result);
+
+  result
 }
 
 macro_rules! gen_seed {
@@ -32,14 +122,14 @@ macro_rules! gen_seed {
 
 pub(crate) fn eval_boolean(
     math: &str,
-    vars: &HashMap<String, String>,
+    // vars: &HashMap<String, String>,
     destination: &String,
 ) -> Result<String> {
     let tt = crate::bools::parse(math);
 
     let mut res = Vec::<String>::new();
 
-    fn f(vars: &HashMap<String, String>, res: &mut Vec<String>, bin_op: crate::bools::BoolExpr) -> () {
+    fn f(/*vars: &HashMap<String, String>,*/ res: &mut Vec<String>, bin_op: crate::bools::BoolExpr) -> () {
         use crate::bools::{BinOpKind, BoolExpr as Expr};
 
         let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
@@ -53,13 +143,13 @@ pub(crate) fn eval_boolean(
                 };
 
                 res.push(format!("SET {first_op}, 0"));
-                f(vars, res, *first);
+                f(/*vars,*/ res, *first);
                 res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
 
                 let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
 
                 res.push(format!("SET {second_op}, 0"));
-                f(vars, res, *second);
+                f(/*vars,*/ res, *second);
 
                 res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
 
@@ -70,7 +160,7 @@ pub(crate) fn eval_boolean(
                 res.push(format!("DROP {first_op}\r\nDROP {second_op}"));
             }
             Expr::UnOp(_, expr) => {
-                f(vars, res, *expr);
+                f(/*vars,*/ res, *expr);
 
                 res.push(format!("NOT $__MATH_RESULT__"));
             }
@@ -80,16 +170,14 @@ pub(crate) fn eval_boolean(
                 ));
             }
             Expr::Variable(name) => {
-                dbg!("2");
-                let reference = vars.get(&name).unwrap();
+                let reference = get_var_from_scope(&name).unwrap();
 
-                println!("decl var {}", reference);
                 res.push(format!("MOV $__MATH_RESULT__, {}", reference));
             }
         }
     }
 
-    f(&vars, &mut res, tt);
+    f(/*&vars, */&mut res, tt);
     res.push(format!(
         "SET {destination}, 0\r\nMOV {destination}, $__MATH_RESULT__"
     ));
@@ -106,14 +194,14 @@ pub(crate) fn eval_boolean(
 
 pub(crate) fn eval_math(
     math: &str,
-    vars: &HashMap<String, String>,
+    // vars: &HashMap<String, String>,
     destination: &String,
 ) -> Result<String> {
     let tt = crate::math::parse(math);
 
     let mut res = Vec::<String>::new();
 
-    fn f(vars: &HashMap<String, String>, res: &mut Vec<String>, bin_op: crate::math::MathExpr) -> () {
+    fn f(/*vars: &HashMap<String, String>,*/ res: &mut Vec<String>, bin_op: crate::math::MathExpr) -> () {
         use crate::math::{BinOpKind, MathExpr};
 
         let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
@@ -129,13 +217,13 @@ pub(crate) fn eval_math(
                 };
 
                 res.push(format!("SET {first_op}, 0"));
-                f(vars, res, *first);
+                f(/*vars,*/ res, *first);
                 res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
 
                 let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
 
                 res.push(format!("SET {second_op}, 0"));
-                f(vars, res, *second);
+                f(/*vars,*/ res, *second);
 
                 res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
 
@@ -146,7 +234,7 @@ pub(crate) fn eval_math(
                 res.push(format!("DROP {first_op}\r\nDROP {second_op}"));
             }
             MathExpr::UnOp(_, expr) => {
-                f(vars, res, *expr);
+                f(/*vars,*/ res, *expr);
 
                 res.push(format!("NEGATE $__MATH_RESULT__"));
             }
@@ -156,16 +244,13 @@ pub(crate) fn eval_math(
                 ));
             }
             MathExpr::Variable(name) => {
-                dbg!("2");
-                let reference = vars.get(&name).unwrap();
-
-                println!("decl var {}", reference);
+                let reference = get_var_from_scope(&name).unwrap();
                 res.push(format!("MOV $__MATH_RESULT__, {}", reference));
             }
         }
     }
 
-    f(&vars, &mut res, tt);
+    f(/*&vars,*/ &mut res, tt);
     res.push(format!(
         "SET {destination}, 0\r\nMOV {destination}, $__MATH_RESULT__"
     ));
@@ -199,7 +284,7 @@ impl Parser {
 
         drop(val_init);
 
-        let vars = VARIABLE_MAPPING.lock().unwrap();
+        // let vars = ___;
 
         let rule = input.as_rule();
 
@@ -220,20 +305,21 @@ impl Parser {
 
                 // buf.push_str(format!("SET {new_name}, 0\r\n").as_str());
 
-                buf = buf + format!("MOV {new_name}, {}\r\n", vars.get(other).unwrap()).as_str();
+                buf = buf + format!("MOV {new_name}, {}\r\n", 
+get_var_from_scope(&other.to_string()).unwrap()).as_str();
 
                 buf
             }
             Rule::inline_math => {
-                eval_math(&("(".to_owned() + input.as_str() + ")"), &vars, &new_name)?
+                eval_math(&("(".to_owned() + input.as_str() + ")"), &new_name)?
             }
-            Rule::group => eval_math(input.as_str(), &vars, &new_name)?,
+            Rule::group => eval_math(input.as_str(), &new_name)?,
             Rule::array => {
                 let mut buf = String::new();
                 let mut inits = vec![];
 
                 let mut index: usize = 0;
-                drop(vars);
+                // drop(vars);
 
                 let seed = gen_seed!();
                 let dest = format!("$__VAL_INIT__#{seed}");
@@ -269,7 +355,7 @@ impl Parser {
 
               let ident = children.next().unwrap().as_str();
 
-              let mut result = format!("SET $__INDEXING_TEMP__, 0\r\nMOV $__INDEXING_TEMP__, {}\r\n", vars.get(ident).unwrap());
+              let mut result = format!("SET $__INDEXING_TEMP__, 0\r\nMOV $__INDEXING_TEMP__, {}\r\n", get_var_from_scope(&ident.to_string()).unwrap());
               
               loop {
                 let index = match children.next() {
@@ -287,10 +373,10 @@ impl Parser {
               format!("{result}MOV {new_name}, $__INDEXING_TEMP__")
             }
             Rule::boolean_group => {
-                eval_boolean(input.as_str(), &vars, &new_name)?
+                eval_boolean(input.as_str(), &new_name)?
             }
             Rule::inline_boolean | Rule::boolean_prefix => {
-                eval_boolean(&("(".to_owned() + input.as_str() + ")"), &vars, &new_name)?
+                eval_boolean(&("(".to_owned() + input.as_str() + ")"), &new_name)?
             }
             _ => panic!("undefined rule: {:?}", rule),
         });
@@ -310,10 +396,13 @@ impl Parser {
         // dbg!(&x);
         let init = Self::val(val)?;
 
-        let mut vars = VARIABLE_MAPPING.lock().unwrap();
+        // let mut vars = VARIABLE_MAPPING.lock().unwrap();
         // let val: String = Self::val(x);
 
-        vars.insert(name.to_string(), new_name.to_string());
+        // add_var_to_scope(&name, &new_name);
+        // vars.insert(name.to_string(), new_name.to_string());
+
+        add_var_to_scope(name.to_string(), new_name.to_string());
 
         Ok(format!(
             "{init}\r\nSET {new_name}, 0\r\nMOV {new_name}, {}",
@@ -354,8 +443,10 @@ impl Parser {
                     }
                 };
 
-                if let Some(compiled_name) = VARIABLE_MAPPING.lock().unwrap().get(interpreted_name)
+                dbg!(1);
+                if let Some(compiled_name) = get_var_from_scope(&interpreted_name.to_string())
                 {
+                    dbg!(2);
                     buf.push_str(&(compiled_name.to_owned() + " "));
                 } else {
                     return Err(pest_consume::Error::new_from_span(
@@ -399,7 +490,11 @@ impl Parser {
 
         let mut children = input.children();
         let ident = children.next().unwrap().as_str();
-        let _args = children.next().unwrap().as_str();
+      
+        let args = children.next().unwrap().as_str();
+
+        push_frame(&("func::".to_owned() + ident + args));
+      
         let body = Self::function_body(children.next().unwrap())?;
 
         result.push_str(format!("~{ident}\r\n").as_str());
@@ -418,6 +513,8 @@ impl Parser {
 
             result.push_str(format!("{}", line).as_str());
         }
+
+        pop_frame();
 
         Ok(result + "\r\n")
     }
@@ -445,6 +542,8 @@ impl Parser {
     fn file(input: Node) -> Result<Vec<String>> {
         let mut result = Vec::<String>::new();
 
+        push_frame("__GLOBALS__");
+      
         for declaration in input.children() {
             match declaration.as_rule() {
                 Rule::declarations => {
@@ -460,9 +559,12 @@ impl Parser {
 
         result.push("~__GLOBALS__\r\nSET $__MATH_RESULT__, 0".into());
 
+        // CALL_STACK.lock().unwrap().push(StackFrame::new("__GLOBALS__"));
+
         for var in GLOBAL_VARS.lock().unwrap().iter() {
             // let mut num = LINE_NUMBER.lock().unwrap();
             // num.add_assign(10);
+            // dbg!(&var);
             result.push(var.to_string())
         }
 
@@ -509,6 +611,11 @@ pub fn compile(path: &String) -> Result<()> {
         .open(compiled_path)
         .unwrap();
 
+    println!("Compilation Successful, writing to file...");
     let _ = file.write_all(buf.as_bytes());
+    println!("Done!\r\n");
+
+    dbg!(CALL_STACK.lock().unwrap());
+  
     Ok(())
 }

@@ -21,12 +21,12 @@ fn main() {
     }
 
     if settings.0 {
-        println!("Compiling...\r\n");
+        println!("Compiling...");
         let _ = compiler::compile(&"examples/test.ms".to_string());
     }
 
     if settings.1 {
-        println!("Running...\r\n");
+        println!("Running...");
 
         let _ = files::run_program(&"examples/test.mmm".to_string());
     }

@@ -58,7 +58,7 @@ inline_boolean = { (boolean_prefix* ~ ((boolean) | ident)) ~ (boolean_infix ~ bo
 
 block = { "{" ~ statement* ~ "}" }
 
-if_statement = { "if" ~ boolean ~ block ~ ("else" ~ (if_statement | block))? }
+if_statement = { "if" ~ (ident | inline_boolean | boolean_primary) ~ block ~ ("else" ~ (if_statement | block))? }
 // END If statement
 
 // START Math

@@ -165,15 +165,18 @@ pub fn run_program(path: &String) {
         }
     };
 
+    println!("Created block mapping\r\nExecuting...\r\n");
+
     let traversed = traverse_lines(
         &mapping,
         &mapping,
         &mut variable_mapping,
         &mut loaded_variables,
     );
+  
     if traversed.is_err() {
         println!(
-            "Error during compilation: {:?}",
+            "Error during runtime: {:?}",
             traversed.err().unwrap().message
         );
         return;
