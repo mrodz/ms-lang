@@ -289,7 +289,7 @@ impl Parser {
             Rule::boolean_group => {
                 eval_boolean(input.as_str(), &vars, &new_name)?
             }
-            Rule::inline_boolean => {
+            Rule::inline_boolean | Rule::boolean_prefix => {
                 eval_boolean(&("(".to_owned() + input.as_str() + ")"), &vars, &new_name)?
             }
             _ => panic!("undefined rule: {:?}", rule),

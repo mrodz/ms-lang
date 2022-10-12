@@ -49,8 +49,8 @@ boolean = { b_true | b_false }
 boolean_infix = { "&&" | "||" | "^" }
 boolean_prefix = { "!" }
 boolean_group = { boolean_prefix* ~ boolean_primary ~ (boolean_infix ~ boolean_prefix* ~ boolean_primary)* }
-boolean_primary = _{ ((boolean) | ident) | "(" ~ boolean_group ~ ")" }
-inline_boolean = { ((boolean) | ident) ~ (boolean_infix ~ ((boolean) | ident))+ }
+boolean_primary = _{ boolean_prefix* ~ ((boolean) | ident) | "(" ~ boolean_group ~ ")" }
+inline_boolean = { (boolean_prefix* ~ ((boolean) | ident)) ~ (boolean_infix ~ boolean_prefix* ~ ((boolean) | ident))+ }
 
 // bool_nested = { ((("(" ~ (boolean | ident | boolean_group) ~ ")") | (boolean | ident | boolean_group)) ~ boolean_infix ~ (("(" ~ (boolean | ident | boolean_group) ~ ")") | (boolean | ident | boolean_group))) }
 // bool_nested = { (boolean | bool_nested) ~ boolean_infix ~ (boolean | bool_nested) }
