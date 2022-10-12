@@ -47,7 +47,7 @@ pub(crate) fn eval_boolean(
         match bin_op {
             Expr::BinOp(first, op, second) => {
                 let cmd = match op {
-                    BinOpKind::And => "ADD",
+                    BinOpKind::And => "AND",
                     BinOpKind::Or => "OR",
                     BinOpKind::Xor => "XOR",
                 };

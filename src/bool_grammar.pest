@@ -3,6 +3,7 @@ digit = { '0'..'9' }
 quote_d = { "\"" }
 quote_s = { "'" }
 underscore = { "_" }
+WHITESPACE = _{ " " | NEWLINE }
 
 ident = @{ !digit ~ (alpha | digit | underscore)+ }
 
@@ -12,5 +13,5 @@ boolean = { b_true | b_false }
 
 boolean_infix = { "&&" | "||" | "^" }
 boolean_prefix = { "!" }
-boolean_group = { boolean_prefix* ~ boolean_primary ~ (boolean_infix ~ boolean_prefix* ~ boolean_primary) }
+boolean_group = { boolean_prefix* ~ boolean_primary ~ (boolean_infix ~ boolean_prefix* ~ boolean_primary)* }
 boolean_primary = _{ ((boolean) | ident) | "(" ~ boolean_group ~ ")" }
