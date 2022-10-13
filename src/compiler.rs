@@ -494,6 +494,31 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
         }))
     }
 
+    fn shorthand_assign(input: Node) -> Result<String> {
+        let mut children = input.children();
+        let ident = children.next().unwrap().as_str();
+        let op = children.next().unwrap().as_str();
+        let val = children.next().unwrap();
+
+        let command = match op {
+            "+=" => "ADD",
+            "-=" => "SUB",
+            "*=" => "MULT",
+            "/=" => "DIV",
+            "%=" => "MOD",
+            _ => unreachable!()
+        };
+
+        let val_init = Self::val(val)?;
+
+
+        let compiled_name = get_var_from_scope(&ident.to_string()).unwrap();
+
+        let val_dest = VAL_INIT_REF.lock().unwrap();
+
+        Ok(format!("{val_init}\r\n{command} {compiled_name}, {val_dest}"))
+    }
+
     fn function_body(input: Node) -> Result<Vec<String>> {
         let mut result = Vec::new();
         for statement in input.children() {
@@ -504,12 +529,7 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
                     Rule::native => result.push(Self::native(part)? + "\r\n"),
                     Rule::function_call => result.push(Self::function_call(part)? + "\r\n"),
                     Rule::variable_reassign => result.push(Self::variable_reassign(part)? + "\r\n"),
-                    Rule::add_assign => result.push(Self::add_assign(part)? + "\r\n"),
-                    Rule::sub_assign => result.push(Self::sub_assign(part)? + "\r\n"),
-                    Rule::mul_assign => result.push(Self::mul_assign(part)? + "\r\n"),
-                    Rule::div_assign => result.push(Self::div_assign(part)? + "\r\n"),
-                    Rule::mod_assign => result.push(Self::mod_assign(part)? + "\r\n"),
-
+                    Rule::shorthand_assign => result.push(Self::shorthand_assign(part)? + "\r\n"),
                     _ => panic!("not implemented: {:?}", rule),
                 }
             }

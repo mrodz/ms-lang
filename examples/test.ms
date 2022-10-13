@@ -1,11 +1,11 @@
-var greeting = 0;
+var greeting = 3;
 
 func main() {
   cat();
 }
 
 func cat() {
-  greeting += 1;
+  greeting *= 3;
 
   native "LOAD $greeting";
   native "SYSCALLRM PrintLn";

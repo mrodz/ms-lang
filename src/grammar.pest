@@ -42,7 +42,7 @@ native = { "native" ~ "\"" ~ native_capture ~ "\"" ~ ";" }
 statement = { 
     (
         (
-            variable | variable_reassign
+            variable | variable_reassign | shorthand_assign
         ) 
         | 
         (
@@ -112,12 +112,13 @@ val = { (inline_boolean | inline_math) | (boolean_primary | primary) | array_ind
 
 variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
 variable_reassign = { ident ~ "=" ~ val ~ ";" }
+shorthand_assign = { ident ~ (add_assign | sub_assign | div_assign | mul_assign | mod_assign) ~ val ~ ";" }
 
-add_assign = { ident ~ "+=" ~ val ~ ";" }
-sub_assign = { ident ~ "-=" ~ val ~ ";" }
-div_assign = { ident ~ "/=" ~ val ~ ";" }
-mul_assign = { ident ~ "*=" ~ val ~ ";" }
-mod_assign = { ident ~ "%=" ~ val ~ ";" }
+add_assign = { "+=" }
+sub_assign = { "-=" }
+div_assign = { "/=" }
+mul_assign = { "*=" }
+mod_assign = { "%=" }
 
 declarations = { variable | function }
 
