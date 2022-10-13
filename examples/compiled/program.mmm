@@ -1,5 +1,5 @@
 ~main
 DIM $y, "a",true,"b",
 DIM $x, 10.1, 20, 30, $y, 50
-LOAD $x
+LOAD $x,
 SYSCALL Print

@@ -22,7 +22,7 @@ string_literal_single = @{ quote_s ~ string_literal_inner_s ~ quote_s }
 // END Strings
 
 // START Functions
-function_call = { ident ~ "(" ~ ((function_arg) ~ ("," ~ function_arg)*)? ~ ")" }
+function_call = { ident ~ "(" ~ ((function_arg) ~ ("," ~ function_arg)*)? ~ ")"}
 function_arg = { val | ident }
 
 function_arguments = { (ident ~ ("," ~ ident)*)? }

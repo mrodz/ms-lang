@@ -4,6 +4,7 @@ use pest_consume::Error;
 use pest_consume::Parser as ParserDerive;
 use rand::prelude::*;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::fs::File;
 use std::io::prelude::*;
 use std::sync::Mutex;
@@ -21,6 +22,12 @@ struct StackFrame {
   variables: HashMap<String, String>,
   depth: usize
 }
+
+// impl Debug for StackFrame {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "")
+//     }
+// }
 
 impl StackFrame {
   pub fn new(name: &str, inherit_from: usize) -> Self {
@@ -42,7 +49,6 @@ impl StackFrame {
   pub fn find_compiled_name(&self, scope_name: &String, stack: &Vec<StackFrame>) -> Option<String> {
     
     for i in (0..=self.depth).rev() {
-      dbg!(i);
       match stack.get(i).unwrap().variables.get(scope_name) {
         Some(name) => return Some(name.to_string()),
         None => continue
@@ -56,7 +62,7 @@ impl StackFrame {
 
 lazy_static! {
     // static ref VARIABLE_MAPPING: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
-    static ref FUNCTION_MAPPING: Mutex<HashMap<String, Vec<String>>> = Mutex::new(HashMap::new());
+    static ref FUNCTION_MAPPING: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
     static ref GLOBAL_VARS: Mutex<Vec<String>> = Mutex::new(Vec::new());
     static ref LINE_NUMBER: Mutex<u32> = Mutex::new(0);
     static ref VAL_INIT_REF: Mutex<String> = Mutex::new(String::new());
@@ -93,22 +99,17 @@ fn add_var_to_scope(name: String, compiled_name: String) {
 }
 
 fn get_var_from_scope(name: &String) -> Option<String> {
-  dbg!('a');
-  let mut stack = CALL_STACK.lock().unwrap();
-  dbg!('b');
+  let stack = CALL_STACK.lock().unwrap();
   
   let i = stack.len() - 1;
   let top: &StackFrame = stack.get(i).unwrap();
 
-  dbg!('c');
   let result = match top.find_compiled_name(name, &stack) {
     Some(str) => Some(str.to_string()),
     None => None
   };
-  dbg!('d');
 
   drop(stack);
-  dbg!(&result);
 
   result
 }
@@ -142,13 +143,13 @@ pub(crate) fn eval_boolean(
                     BinOpKind::Xor => "XOR",
                 };
 
-                res.push(format!("SET {first_op}, 0"));
+                // res.push(format!("SET {first_op}, 0"));
                 f(/*vars,*/ res, *first);
                 res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
 
                 let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
 
-                res.push(format!("SET {second_op}, 0"));
+                // res.push(format!("SET {second_op}, 0"));
                 f(/*vars,*/ res, *second);
 
                 res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
@@ -166,7 +167,7 @@ pub(crate) fn eval_boolean(
             }
             Expr::Boolean(n) => {
                 res.push(format!(
-                    "SET {first_op}, {n}\r\nMOV $__MATH_RESULT__, {first_op}\r\nDROP {first_op}"
+                    "SET $__MATH_RESULT__, {n}"
                 ));
             }
             Expr::Variable(name) => {
@@ -179,7 +180,7 @@ pub(crate) fn eval_boolean(
 
     f(/*&vars, */&mut res, tt);
     res.push(format!(
-        "SET {destination}, 0\r\nMOV {destination}, $__MATH_RESULT__"
+        "MOV {destination}, $__MATH_RESULT__"
     ));
 
     let mut buf = String::new();
@@ -216,13 +217,13 @@ pub(crate) fn eval_math(
                     BinOpKind::Div => "DIV",
                 };
 
-                res.push(format!("SET {first_op}, 0"));
+                // res.push(format!("SET {first_op}, 0"));
                 f(/*vars,*/ res, *first);
                 res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
 
                 let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
 
-                res.push(format!("SET {second_op}, 0"));
+                // res.push(format!("SET {second_op}, 0"));
                 f(/*vars,*/ res, *second);
 
                 res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
@@ -240,7 +241,7 @@ pub(crate) fn eval_math(
             }
             MathExpr::Number(n) => {
                 res.push(format!(
-                    "SET {first_op}, {n}\r\nMOV $__MATH_RESULT__, {first_op}\r\nDROP {first_op}"
+                    "SET $__MATH_RESULT__, {n}"
                 ));
             }
             MathExpr::Variable(name) => {
@@ -252,7 +253,7 @@ pub(crate) fn eval_math(
 
     f(/*&vars,*/ &mut res, tt);
     res.push(format!(
-        "SET {destination}, 0\r\nMOV {destination}, $__MATH_RESULT__"
+        "MOV {destination}, $__MATH_RESULT__"
     ));
 
     let mut buf = String::new();
@@ -266,12 +267,6 @@ pub(crate) fn eval_math(
 
 #[pest_consume::parser]
 impl Parser {
-    fn function_call(input: Node) -> Result<String> {
-        println!("{:?}", input);
-
-        todo!("Add function calls");
-    }
-
     fn val(input: Node) -> Result<String> {
         let input = input.children().next().unwrap();
 
@@ -303,8 +298,6 @@ impl Parser {
 
                 let other = input.as_str();
 
-                // buf.push_str(format!("SET {new_name}, 0\r\n").as_str());
-
                 buf = buf + format!("MOV {new_name}, {}\r\n", 
 get_var_from_scope(&other.to_string()).unwrap()).as_str();
 
@@ -334,7 +327,7 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
                     let c = VAL_INIT_REF.lock().unwrap();
 
                     buf.push_str(
-                        format!("SET {temp_id}, 0\r\n{result}\r\nMOV {temp_id}, {c}\r\n",).as_str(),
+                        format!("{result}\r\nMOV {temp_id}, {c}\r\n",).as_str(),
                     );
                 }
 
@@ -355,7 +348,7 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
 
               let ident = children.next().unwrap().as_str();
 
-              let mut result = format!("SET $__INDEXING_TEMP__, 0\r\nMOV $__INDEXING_TEMP__, {}\r\n", get_var_from_scope(&ident.to_string()).unwrap());
+              let mut result = format!("MOV $__INDEXING_TEMP__, {}\r\n", get_var_from_scope(&ident.to_string()).unwrap());
               
               loop {
                 let index = match children.next() {
@@ -366,10 +359,6 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
                 result.push_str(format!("AT $__INDEXING_TEMP__, {index}, $__INDEXING_TEMP__\r\n").as_str());
               }
               
-              // dbg!(ident);
-              
-              // "REM array index".to_string();
-
               format!("{result}MOV {new_name}, $__INDEXING_TEMP__")
             }
             Rule::boolean_group => {
@@ -393,7 +382,6 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
 
         let new_name = format!("${name}_{seed}");
 
-        // dbg!(&x);
         let init = Self::val(val)?;
 
         // let mut vars = VARIABLE_MAPPING.lock().unwrap();
@@ -405,7 +393,7 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
         add_var_to_scope(name.to_string(), new_name.to_string());
 
         Ok(format!(
-            "{init}\r\nSET {new_name}, 0\r\nMOV {new_name}, {}",
+            "{init}\r\nMOV {new_name}, {}",
             *VAL_INIT_REF.lock().unwrap()
         ))
     }
@@ -443,10 +431,8 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
                     }
                 };
 
-                dbg!(1);
                 if let Some(compiled_name) = get_var_from_scope(&interpreted_name.to_string())
                 {
-                    dbg!(2);
                     buf.push_str(&(compiled_name.to_owned() + " "));
                 } else {
                     return Err(pest_consume::Error::new_from_span(
@@ -465,6 +451,34 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
         Ok(buf.trim_end().to_string())
     }
 
+    fn function_call(input: Node) -> Result<String> {
+        let mut children = input.children();
+
+        let ident = children.next().unwrap().as_str();
+
+        let mut result = String::new();
+
+        let mut val_inits = vec![];
+
+        for param in children {
+            let val = param.children().next().unwrap();
+            let init = Self::val(val).unwrap();
+            result.push_str(&(init.as_str().to_owned() + "\r\n"));
+            let init_dest = VAL_INIT_REF.lock().unwrap();
+            val_inits.push(init_dest.clone());
+        }
+
+
+
+        Ok(format!("{result}\r\n{}\r\nJMP {ident}", {
+            let mut buf = String::from("LOAD ");
+            for val_init in val_inits {
+                buf.push_str((val_init + ",").as_str());
+            }
+            buf
+        }))
+    }
+
     fn function_body(input: Node) -> Result<Vec<String>> {
         let mut result = Vec::new();
         for statement in input.children() {
@@ -472,8 +486,8 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
                 let rule = part.as_rule();
                 match rule {
                     Rule::variable => result.push(Self::variable(part)? + "\r\n"),
-
                     Rule::native => result.push(Self::native(part)? + "\r\n"),
+                    Rule::function_call => result.push(Self::function_call(part)? + "\r\n"),
                     _ => panic!("not implemented: {:?}", rule),
                 }
             }
@@ -490,14 +504,38 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
 
         let mut children = input.children();
         let ident = children.next().unwrap().as_str();
-      
-        let args = children.next().unwrap().as_str();
 
-        push_frame(&("func::".to_owned() + ident + args));
       
-        let body = Self::function_body(children.next().unwrap())?;
+        let args = children.next().unwrap();
 
-        result.push_str(format!("~{ident}\r\n").as_str());
+        push_frame(&("func::".to_owned() + ident + args.as_str()));
+        result.push_str(format!("\r\n~{ident}\r\n").as_str());
+
+        let mut c: usize = 0;
+        for arg in args.children() {
+            let seed = gen_seed!();
+
+            let new_name = format!("${}_{seed}", arg.as_str());
+            
+            result.push_str(format!("ARG {c}, {}\r\n", &new_name).as_str());
+
+            let interpreted = arg.as_str().to_string();
+
+            dbg!(&interpreted);
+
+            add_var_to_scope(interpreted, new_name);
+            c += 1;
+        }
+
+        let mut fn_map = FUNCTION_MAPPING.lock().unwrap();
+
+        fn_map.insert(ident.to_string(), c + 1);
+
+        result.push_str("POPALL\r\n");
+
+        dbg!(&ident);
+        let body = Self::function_body(children.next().unwrap()).unwrap();
+        dbg!(&body);
 
         if ident == "main" {
             // let mut n = LINE_NUMBER.lock().unwrap();
@@ -513,6 +551,8 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
 
             result.push_str(format!("{}", line).as_str());
         }
+
+        dbg!(&result);
 
         pop_frame();
 
@@ -564,7 +604,6 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
         for var in GLOBAL_VARS.lock().unwrap().iter() {
             // let mut num = LINE_NUMBER.lock().unwrap();
             // num.add_assign(10);
-            // dbg!(&var);
             result.push(var.to_string())
         }
 
@@ -595,10 +634,8 @@ pub fn compile(path: &String) -> Result<()> {
 
     let c = Parser::file(input).unwrap();
 
-    // println!("Compiled:");
     let mut buf = String::new();
     for l in c {
-        // println!("{l}");
         buf += &(l + "\r\n");
     }
 
@@ -615,7 +652,5 @@ pub fn compile(path: &String) -> Result<()> {
     let _ = file.write_all(buf.as_bytes());
     println!("Done!\r\n");
 
-    dbg!(CALL_STACK.lock().unwrap());
-  
     Ok(())
 }
