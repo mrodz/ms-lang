@@ -45,7 +45,12 @@ impl Variable {
         match self {
             Self::Number(n) => format!("{}", n),
             Self::Boolean(b) => format!("{}", b),
-            Self::String(s) => format!("{}{}{}", if append_type { "\"" } else { "" }, s, if append_type { "\"" } else { "" }),
+            Self::String(s) => format!(
+                "{}{}{}",
+                if append_type { "\"" } else { "" },
+                s,
+                if append_type { "\"" } else { "" }
+            ),
             Self::Dim(d) => {
                 let mut res = String::from("[");
 
@@ -62,7 +67,9 @@ impl Variable {
                     res.get(0..res.len() - 2).unwrap()
                 } else {
                     res.as_str()
-                }).to_owned() + "]";
+                })
+                .to_owned()
+                    + "]";
 
                 actual
             }
@@ -173,7 +180,7 @@ pub fn run_program(path: &String) {
         &mut variable_mapping,
         &mut loaded_variables,
     );
-  
+
     if traversed.is_err() {
         println!(
             "Error during runtime: {:?}",
@@ -219,90 +226,104 @@ mod commands {
         variables: &mut VarMapping,
         _loaded_variables: &mut LoadedVars,
         _function_context: &FunctionContext,
-        _functions: &GlobalFunctions
+        _functions: &GlobalFunctions,
     ) -> CommandRet {
-      if let (Some(var), Some(index), Some(dest)) = (ctx.arguments.get(0), ctx.arguments.get(1), ctx.arguments.get(2)) {
-          if let Ok(index) = index.parse::<usize>() {
-              if !dest.starts_with("$") {
-                  return Err(MountError::new(format!(
+        if let (Some(var), Some(index), Some(dest)) = (
+            ctx.arguments.get(0),
+            ctx.arguments.get(1),
+            ctx.arguments.get(2),
+        ) {
+            if let Ok(index) = index.parse::<usize>() {
+                if !dest.starts_with("$") {
+                    return Err(MountError::new(format!(
                     "Invalid 'ARG' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
                     ctx.number, dest
-                  ))); 
-              }           
+                  )));
+                }
 
-              if let Some(d) = variables.get(var) {
-                  if let Variable::Dim(d) = d {
-                      match d.get(index) {
-                          Some(v) => {
-                              let cloned = v.clone();
-                              variables.insert(dest.to_string(), cloned);
-                          }
-                          None => return Err(MountError::new(format!("Index out of bounds on line {}: {index}", ctx.number)))
-                      }
+                if let Some(d) = variables.get(var) {
+                    if let Variable::Dim(d) = d {
+                        match d.get(index) {
+                            Some(v) => {
+                                let cloned = v.clone();
+                                variables.insert(dest.to_string(), cloned);
+                            }
+                            None => {
+                                return Err(MountError::new(format!(
+                                    "Index out of bounds on line {}: {index}",
+                                    ctx.number
+                                )))
+                            }
+                        }
 
-                      Ok(())
-                  } else {
-                    Err(MountError::new(
-                    format!("Invalid data types on line {}: Expected <dim>", ctx.number)
-                        .to_string(),
-              ))
-                  }      
-              } else {
-                return Err(MountError::new(format!(
-                "Variable '{}' has not been declared, but it is referenced on line {}",
-                var, ctx.number
-            )))
-              }
-          } else {
-              Err(MountError::new(
+                        Ok(())
+                    } else {
+                        Err(MountError::new(
+                            format!("Invalid data types on line {}: Expected <dim>", ctx.number)
+                                .to_string(),
+                        ))
+                    }
+                } else {
+                    return Err(MountError::new(format!(
+                        "Variable '{}' has not been declared, but it is referenced on line {}",
+                        var, ctx.number
+                    )));
+                }
+            } else {
+                Err(MountError::new(
                     format!("Invalid data types on line {}: Expected <int>", ctx.number)
                         .to_string(),
-              ))
-          }
-      } else {
-          Err(MountError::new(format!(
+                ))
+            }
+        } else {
+            Err(MountError::new(format!(
                 "Invalid 'AT' on line {}\r\n\tSyntax --\r\n\tAT $DimName, index, $dest",
                 ctx.number
-          )))
-      }
+            )))
+        }
     }
-
 
     pub fn arg(
         ctx: &Line,
         variables: &mut VarMapping,
         loaded_variables: &mut LoadedVars,
         _function_context: &FunctionContext,
-        _functions: &GlobalFunctions
+        _functions: &GlobalFunctions,
     ) -> CommandRet {
-      if let (Some(index), Some(dest)) = (ctx.arguments.get(0), ctx.arguments.get(1)) {
-          if let Ok(index) = index.parse::<usize>() {
-              if !dest.starts_with("$") {
-                  return Err(MountError::new(format!(
+        if let (Some(index), Some(dest)) = (ctx.arguments.get(0), ctx.arguments.get(1)) {
+            if let Ok(index) = index.parse::<usize>() {
+                if !dest.starts_with("$") {
+                    return Err(MountError::new(format!(
                     "Invalid 'ARG' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
                     ctx.number, dest
-                  ))); 
-              }           
-  
-              match loaded_variables.get(index) {
-                  Some(v) => {
-                      variables.insert(dest.to_string(), v.clone());
-                  }
-                  None => return Err(MountError::new(format!("Index out of bounds on line {}: {index}", ctx.number)))
-              };
+                  )));
+                }
 
-              Ok(())
-          } else {
-              Err(MountError::new(
-                    format!("Invalid data types on line {}: Expected <int>", ctx.number),
-              ))
-          }
-      } else {
-          Err(MountError::new(format!(
+                match loaded_variables.get(index) {
+                    Some(v) => {
+                        variables.insert(dest.to_string(), v.clone());
+                    }
+                    None => {
+                        return Err(MountError::new(format!(
+                            "Index out of bounds on line {}: {index}",
+                            ctx.number
+                        )))
+                    }
+                };
+
+                Ok(())
+            } else {
+                Err(MountError::new(format!(
+                    "Invalid data types on line {}: Expected <int>",
+                    ctx.number
+                )))
+            }
+        } else {
+            Err(MountError::new(format!(
                 "Invalid 'ARG' on line {}\r\n\tSyntax --\r\n\tARG index, $dest",
                 ctx.number
-          )))
-      }
+            )))
+        }
     }
 
     pub fn cast_number(
@@ -936,10 +957,10 @@ mod commands {
 
         // let _ = var_exists(var1_name, variables)?;
         if !var1_name.starts_with('$') {
-          return Err(MountError::new(format!(
-                    "Invalid 'MOV' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
-                    ctx.number, var1_name
-                  )));
+            return Err(MountError::new(format!(
+                "Invalid 'MOV' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
+                ctx.number, var1_name
+            )));
         }
 
         let var2 = var_exists(ctx.arguments.get(1).unwrap(), variables)

@@ -1,7 +1,7 @@
+mod bools;
 mod compiler;
 mod files;
 mod math;
-mod bools;
 
 use std::env;
 

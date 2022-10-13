@@ -23,7 +23,7 @@ string_literal_single = @{ quote_s ~ string_literal_inner_s ~ quote_s }
 
 // START Functions
 function_call = { ident ~ "(" ~ ((function_arg) ~ ("," ~ function_arg)*)? ~ ")"}
-function_arg = { val | ident }
+function_arg = { val }
 
 function_arguments = { (ident ~ ("," ~ ident)*)? }
 
@@ -108,7 +108,7 @@ array_index_num = { ASCII_DIGIT{1,} }
 
 array_index = { ident ~ ("[" ~ array_index_num ~ "]"){1,} }
 
-val = { (inline_boolean | inline_math) | (boolean_primary | primary) | array_index | (string_literal_double | string_literal_single) | function_call | ident }
+val = { (array_index | array) | (inline_boolean | inline_math) | (boolean_primary | primary) | (string_literal_double | string_literal_single) | function_call | ident }
 
 variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
 variable_reassign = { ident ~ "=" ~ val ~ ";" }
