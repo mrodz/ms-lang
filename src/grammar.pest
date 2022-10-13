@@ -39,7 +39,18 @@ native_capture = { (!"\"" ~ ANY)* }
 native = { "native" ~ "\"" ~ native_capture ~ "\"" ~ ";" }
 // END Native statement
 
-statement = { (variable | (function_call ~ ";") | native | if_statement) }
+statement = { 
+    (
+        (
+            variable | variable_reassign
+        ) 
+        | 
+        (
+            function_call ~ ";"
+        ) 
+        | native | if_statement
+    ) 
+}
 
 // START If statement
 b_true = { "true" }
@@ -48,13 +59,30 @@ boolean = { b_true | b_false }
 
 boolean_infix = { "&&" | "||" | "^" }
 boolean_prefix = { "!" }
-boolean_group = { boolean_prefix* ~ boolean_primary ~ (boolean_infix ~ boolean_prefix* ~ boolean_primary)* }
-boolean_primary = _{ boolean_prefix* ~ ((boolean) | ident) | "(" ~ boolean_group ~ ")" }
-inline_boolean = { (boolean_prefix* ~ ((boolean) | ident)) ~ (boolean_infix ~ boolean_prefix* ~ ((boolean) | ident))+ }
-
-// bool_nested = { ((("(" ~ (boolean | ident | boolean_group) ~ ")") | (boolean | ident | boolean_group)) ~ boolean_infix ~ (("(" ~ (boolean | ident | boolean_group) ~ ")") | (boolean | ident | boolean_group))) }
-// bool_nested = { (boolean | bool_nested) ~ boolean_infix ~ (boolean | bool_nested) }
-
+boolean_group = { 
+    boolean_prefix* ~ boolean_primary ~ (
+        boolean_infix ~ boolean_prefix* ~ boolean_primary
+    )* 
+}
+boolean_primary = _{ 
+    boolean_prefix* ~ 
+    (
+        (boolean)
+        | ident
+    ) 
+    | "(" ~ boolean_group ~ ")" 
+}
+inline_boolean = { 
+    (
+        boolean_prefix* ~ (
+            (boolean) | ident
+        )
+    ) ~ (
+        boolean_infix ~ boolean_prefix* ~ (
+            (boolean) | ident
+        )
+    )+ 
+}
 
 block = { "{" ~ statement* ~ "}" }
 
@@ -80,11 +108,16 @@ array_index_num = { ASCII_DIGIT{1,} }
 
 array_index = { ident ~ ("[" ~ array_index_num ~ "]"){1,} }
 
-
-
-val = { inline_boolean | boolean_primary | array_index | inline_math | primary | (string_literal_double | string_literal_single) | function_call | ident }
+val = { (inline_boolean | inline_math) | (boolean_primary | primary) | array_index | (string_literal_double | string_literal_single) | function_call | ident }
 
 variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
+variable_reassign = { ident ~ "=" ~ val ~ ";" }
+
+add_assign = { ident ~ "+=" ~ val ~ ";" }
+sub_assign = { ident ~ "-=" ~ val ~ ";" }
+div_assign = { ident ~ "/=" ~ val ~ ";" }
+mul_assign = { ident ~ "*=" ~ val ~ ";" }
+mod_assign = { ident ~ "%=" ~ val ~ ";" }
 
 declarations = { variable | function }
 

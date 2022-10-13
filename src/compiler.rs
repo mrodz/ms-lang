@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::prelude::*;
+use std::result;
 use std::sync::Mutex;
 
 type Result<T> = std::result::Result<T, Error<Rule>>;
@@ -451,6 +452,22 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
         Ok(buf.trim_end().to_string())
     }
 
+    fn variable_reassign(input: Node) -> Result<String> {
+        let mut children = input.children();
+
+        let ident = children.next().unwrap().as_str();
+
+        let val = children.next().unwrap();
+
+        let val_init = Self::val(val)?;
+
+        let val_init_dest = VAL_INIT_REF.lock().unwrap();
+
+        let compiled_name = get_var_from_scope(&ident.to_string()).unwrap();
+
+        Ok(format!("{val_init}\r\nMOV {compiled_name}, {val_init_dest}"))
+    }
+
     fn function_call(input: Node) -> Result<String> {
         let mut children = input.children();
 
@@ -467,8 +484,6 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
             let init_dest = VAL_INIT_REF.lock().unwrap();
             val_inits.push(init_dest.clone());
         }
-
-
 
         Ok(format!("{result}\r\n{}\r\nJMP {ident}", {
             let mut buf = String::from("LOAD ");
@@ -488,6 +503,13 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
                     Rule::variable => result.push(Self::variable(part)? + "\r\n"),
                     Rule::native => result.push(Self::native(part)? + "\r\n"),
                     Rule::function_call => result.push(Self::function_call(part)? + "\r\n"),
+                    Rule::variable_reassign => result.push(Self::variable_reassign(part)? + "\r\n"),
+                    Rule::add_assign => result.push(Self::add_assign(part)? + "\r\n"),
+                    Rule::sub_assign => result.push(Self::sub_assign(part)? + "\r\n"),
+                    Rule::mul_assign => result.push(Self::mul_assign(part)? + "\r\n"),
+                    Rule::div_assign => result.push(Self::div_assign(part)? + "\r\n"),
+                    Rule::mod_assign => result.push(Self::mod_assign(part)? + "\r\n"),
+
                     _ => panic!("not implemented: {:?}", rule),
                 }
             }
@@ -521,8 +543,6 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
 
             let interpreted = arg.as_str().to_string();
 
-            dbg!(&interpreted);
-
             add_var_to_scope(interpreted, new_name);
             c += 1;
         }
@@ -533,9 +553,7 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
 
         result.push_str("POPALL\r\n");
 
-        dbg!(&ident);
         let body = Self::function_body(children.next().unwrap()).unwrap();
-        dbg!(&body);
 
         if ident == "main" {
             // let mut n = LINE_NUMBER.lock().unwrap();
@@ -551,8 +569,6 @@ get_var_from_scope(&other.to_string()).unwrap()).as_str();
 
             result.push_str(format!("{}", line).as_str());
         }
-
-        dbg!(&result);
 
         pop_frame();
 

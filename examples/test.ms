@@ -1,8 +1,12 @@
-func fizz(num, bool) {
-  native "LOAD $num, $bool";
-  native "SYSCALLRM PrintLn";
-}
+var greeting = 0;
 
 func main() {
-  fizz((5 + -10 / 2 * (3 - 1)), true || false);
+  cat();
+}
+
+func cat() {
+  greeting += 1;
+
+  native "LOAD $greeting";
+  native "SYSCALLRM PrintLn";
 }
