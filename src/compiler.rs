@@ -43,10 +43,15 @@ impl StackFrame {
         }
     }
 
+    /// # Add a variable to the current stack frame.
     pub fn add_var(&mut self, scope_name: String, compiled_name: String) {
         self.variables.insert(scope_name, compiled_name);
     }
 
+    /// # Get the compiled name of a variable. 
+    /// This variable must be in scope, and the function will
+    /// return the first instance it encounters. The most
+    /// specific variable will take presedence.
     pub fn find_compiled_name(
         &self,
         scope_name: &String,
@@ -73,24 +78,24 @@ lazy_static! {
     static ref CALL_STACK: Mutex<Vec<StackFrame>> = Mutex::new(Vec::new());
 }
 
-// fn top_frame<'a>(stack: &'a Vec<StackFrame>) -> &'a StackFrame {
-//   stack.get(stack.len() - 1).unwrap()
-// }
-
+/// # Add a new stack frame, given a name.
 fn push_frame(name: &str) {
     let mut stack = CALL_STACK.lock().unwrap();
-
     let len = stack.len();
-
-    // let top = stack.get(len - 1).unwrap();
-
     stack.push(StackFrame::new(name, len));
 }
 
+/// # Pop the top stack frame.
 fn pop_frame() {
     CALL_STACK.lock().unwrap().pop();
 }
 
+/// # Register a variable to a scope.
+/// Requires a name, which the language uses, and the compiled name,
+/// which should be *unique* and differ from the reference name to avoid data collisions.
+/// 
+/// Currently does not check for unique compiled names, or whether
+/// the name is already in the scope.
 fn add_var_to_scope(name: String, compiled_name: String) {
     let mut stack = CALL_STACK.lock().unwrap();
     let i = stack.len() - 1;
@@ -101,6 +106,9 @@ fn add_var_to_scope(name: String, compiled_name: String) {
     drop(stack);
 }
 
+/// # Get the compiled name of a variable.
+/// Will be `Some` is the variable is accessible from the current scope,
+/// otherwise will be `None`.
 fn get_var_from_scope(name: &String) -> Option<String> {
     let stack = CALL_STACK.lock().unwrap();
 
@@ -124,6 +132,8 @@ macro_rules! gen_seed {
     }};
 }
 
+/// # Evaluate a boolean expression
+/// Will store the result in `destination`
 pub(crate) fn eval_boolean(
     math: &str,
     // vars: &HashMap<String, String>,
@@ -134,7 +144,7 @@ pub(crate) fn eval_boolean(
     let mut res = Vec::<String>::new();
 
     fn f(
-        /*vars: &HashMap<String, String>,*/ res: &mut Vec<String>,
+        res: &mut Vec<String>,
         bin_op: crate::bools::BoolExpr,
     ) -> () {
         use crate::bools::{BinOpKind, BoolExpr as Expr};
@@ -194,9 +204,10 @@ pub(crate) fn eval_boolean(
     Ok(buf)
 }
 
+/// # Evaluate a math expression
+/// Will store the result in `destination`
 pub(crate) fn eval_math(
     math: &str,
-    // vars: &HashMap<String, String>,
     destination: &String,
 ) -> Result<String> {
     let tt = crate::math::parse(math);
@@ -204,7 +215,7 @@ pub(crate) fn eval_math(
     let mut res = Vec::<String>::new();
 
     fn f(
-        /*vars: &HashMap<String, String>,*/ res: &mut Vec<String>,
+        res: &mut Vec<String>,
         bin_op: crate::math::MathExpr,
     ) -> () {
         use crate::math::{BinOpKind, MathExpr};
@@ -222,13 +233,13 @@ pub(crate) fn eval_math(
                 };
 
                 // res.push(format!("SET {first_op}, 0"));
-                f(/*vars,*/ res, *first);
+                f(res, *first);
                 res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
 
                 let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
 
                 // res.push(format!("SET {second_op}, 0"));
-                f(/*vars,*/ res, *second);
+                f(res, *second);
 
                 res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
 
@@ -239,7 +250,7 @@ pub(crate) fn eval_math(
                 res.push(format!("DROP {first_op}\r\nDROP {second_op}"));
             }
             MathExpr::UnOp(_, expr) => {
-                f(/*vars,*/ res, *expr);
+                f(res, *expr);
 
                 res.push(format!("NEGATE $__MATH_RESULT__"));
             }
@@ -253,7 +264,7 @@ pub(crate) fn eval_math(
         }
     }
 
-    f(/*&vars,*/ &mut res, tt);
+    f(&mut res, tt);
     res.push(format!("MOV {destination}, $__MATH_RESULT__"));
 
     let mut buf = String::new();
@@ -265,8 +276,11 @@ pub(crate) fn eval_math(
     Ok(buf)
 }
 
+/// # The Pest Language Parser
 #[pest_consume::parser]
 impl Parser {
+    /// # Evaluate *any* "val" rule.
+    /// Will store the result in the register stored at VAL_INIT_REF
     fn val(input: Node) -> Result<String> {
         let input = input.children().next().unwrap();
 
@@ -276,10 +290,7 @@ impl Parser {
         let mut val_init = VAL_INIT_REF.lock().unwrap();
 
         *val_init = new_name.to_string();
-
         drop(val_init);
-
-        // let vars = ___;
 
         let rule = input.as_rule();
 
@@ -338,7 +349,7 @@ impl Parser {
 
                 for init in inits {
                     array_init.push_str(&(init.to_owned() + ","));
-                    cleanup.push_str(&("DROP ".to_owned() + init.as_str() + "\r\n"));
+                    cleanup.push_str(&("DROP ".to_owned() + init.as_str() + "\r\n")); // clean up
                 }
 
                 buf + array_init.as_str() + cleanup.as_str()
@@ -376,6 +387,8 @@ impl Parser {
         ret
     }
 
+    /// # Variable declaration
+    /// `var x = 10;`
     fn variable(input: Node) -> Result<String> {
         let mut parts = input.children();
         let name = parts.next().unwrap().as_str();
@@ -385,13 +398,7 @@ impl Parser {
 
         let new_name = format!("${name}_{seed}");
 
-        let init = Self::val(val)?;
-
-        // let mut vars = VARIABLE_MAPPING.lock().unwrap();
-        // let val: String = Self::val(x);
-
-        // add_var_to_scope(&name, &new_name);
-        // vars.insert(name.to_string(), new_name.to_string());
+        let init = Self::val(val)?; // evaluate the 
 
         add_var_to_scope(name.to_string(), new_name.to_string());
 
@@ -401,6 +408,10 @@ impl Parser {
         ))
     }
 
+    /// # Native statement implementation
+    /// Native statements allow for .MMM code injection.
+    /// Allows references to local variables by their interpreted name, 
+    /// will search for their compiled name.
     fn native(input: Node) -> Result<String> {
         let code = input.children().next().unwrap().as_str();
 
@@ -453,6 +464,9 @@ impl Parser {
         Ok(buf.trim_end().to_string())
     }
 
+    /// # Variable reassignment statement.
+    /// Makes use of the `MOV` command.
+    /// `var a = 10; a = 20;`
     fn variable_reassign(input: Node) -> Result<String> {
         let mut children = input.children();
 
@@ -471,6 +485,7 @@ impl Parser {
         ))
     }
 
+    /// # Function call implementation
     fn function_call(input: Node) -> Result<String> {
         let mut children = input.children();
 
@@ -502,6 +517,13 @@ impl Parser {
         ))
     }
 
+    /// # Shortcut for variable reassignment
+    /// Implementation for:
+    /// - +=
+    /// - -=
+    /// - *=
+    /// - /=
+    /// - %=
     fn shorthand_assign(input: Node) -> Result<String> {
         let mut children = input.children();
         let ident = children.next().unwrap().as_str();
@@ -528,6 +550,8 @@ impl Parser {
         ))
     }
 
+    /// # Function Bodies
+    /// Iterate over each statement in a function, run/evauluate the code.
     fn function_body(input: Node) -> Result<Vec<String>> {
         let mut result = Vec::new();
         for statement in input.children() {
@@ -545,12 +569,11 @@ impl Parser {
         }
 
         return Ok(result);
-        // todo!("")
     }
 
+    /// # Function declaration
+    /// `func fizz() { }`
     fn function(input: Node) -> Result<String> {
-        // LINE_NUMBER.lock().unwrap().add_assign(10000);
-
         let mut result = String::new();
 
         let mut children = input.children();
@@ -583,11 +606,8 @@ impl Parser {
 
         let body = Self::function_body(children.next().unwrap()).unwrap();
 
+        // if it is the main function, load the constants.
         if ident == "main" {
-            // let mut n = LINE_NUMBER.lock().unwrap();
-
-            // n.add_assign(10);
-
             result.push_str(format!("JMP __GLOBALS__\r\n").as_str());
         }
 
@@ -603,10 +623,10 @@ impl Parser {
         Ok(result + "\r\n")
     }
 
+    /// # Top-level program declarations.
+    /// Currently supports: functions, variables.
     fn declarations(input: Node) -> Result<String> {
         let mut result = String::new();
-
-        // let mut top_level_vars = String::new();
 
         for decl in input.children() {
             match decl.as_rule() {
@@ -623,6 +643,8 @@ impl Parser {
         Ok(result)
     }
 
+    /// # Process the file.
+    /// This is the "__GLOBALS__" stack frame.
     fn file(input: Node) -> Result<Vec<String>> {
         let mut result = Vec::<String>::new();
 
@@ -655,6 +677,7 @@ impl Parser {
     }
 }
 
+/// # Compile a `.ms` file to a `.mmm` instruction file.
 pub fn compile(path: &String) -> Result<()> {
     use crate::files::read_file;
 
