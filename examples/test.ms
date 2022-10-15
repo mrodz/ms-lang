@@ -1,9 +1,11 @@
-func main() {
-  print_first_element([1, true && false, 3 + 2 * 10]);
-}
+var arr = [[500, "Hello World"], 2, 3];
 
-func print_first_element(array) {
-  var middle = array[1];
-  native "LOAD $array, $middle";
+
+func main() {
+  var i = 0;
+  var j = 1;
+
+  var e = arr[i][j];
+  native "LOAD $e";
   native "SYSCALLRM PrintLn";
 }

@@ -221,6 +221,26 @@ mod commands {
         }
     }
 
+    fn index_or_val(str: &String, variables: &mut VarMapping) -> Option<usize> {
+        if str.starts_with('$') {
+            dbg!("var");
+
+            if let Some(Variable::Number(var)) = variables.get(str) {
+                dbg!(str);
+                Some(*var as usize)
+            } else {
+                dbg!("not number");
+                None
+            }
+        } else if let Ok(index) = str.parse::<usize>() {
+            dbg!("num");
+            return Some(index)
+        } else {
+            dbg!("none");
+            None
+        }
+    }
+
     pub fn at(
         ctx: &Line,
         variables: &mut VarMapping,
@@ -233,7 +253,7 @@ mod commands {
             ctx.arguments.get(1),
             ctx.arguments.get(2),
         ) {
-            if let Ok(index) = index.parse::<usize>() {
+            if let Some(index) = index_or_val(&index, variables) {
                 if !dest.starts_with("$") {
                     return Err(MountError::new(format!(
                     "Invalid 'ARG' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
@@ -242,9 +262,11 @@ mod commands {
                 }
 
                 if let Some(d) = variables.get(var) {
+                    dbg!(&d);
                     if let Variable::Dim(d) = d {
                         match d.get(index) {
                             Some(v) => {
+                                dbg!("in bounds", v, &dest);
                                 let cloned = v.clone();
                                 variables.insert(dest.to_string(), cloned);
                             }
@@ -258,8 +280,9 @@ mod commands {
 
                         Ok(())
                     } else {
+                        dbg!(var);
                         Err(MountError::new(
-                            format!("Invalid data types on line {}: Expected <dim>", ctx.number)
+                            format!("Invalid data types on line {}: Expected <dim>, found {:?}", ctx.number, d)
                                 .to_string(),
                         ))
                     }
@@ -271,7 +294,7 @@ mod commands {
                 }
             } else {
                 Err(MountError::new(
-                    format!("Invalid data types on line {}: Expected <int>", ctx.number)
+                    format!("Invalid data types on line {}: Expected <int>, found {index}", ctx.number)
                         .to_string(),
                 ))
             }

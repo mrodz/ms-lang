@@ -48,7 +48,7 @@ impl StackFrame {
         self.variables.insert(scope_name, compiled_name);
     }
 
-    /// # Get the compiled name of a variable. 
+    /// # Get the compiled name of a variable.
     /// This variable must be in scope, and the function will
     /// return the first instance it encounters. The most
     /// specific variable will take presedence.
@@ -74,9 +74,10 @@ lazy_static! {
     static ref FUNCTION_MAPPING: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
     static ref GLOBAL_VARS: Mutex<Vec<String>> = Mutex::new(Vec::new());
     static ref LINE_NUMBER: Mutex<u32> = Mutex::new(0);
-    static ref VAL_INIT_REF: Mutex<String> = Mutex::new(String::new());
     static ref CALL_STACK: Mutex<Vec<StackFrame>> = Mutex::new(Vec::new());
 }
+
+static mut VAL_INIT_REF: String = String::new();
 
 /// # Add a new stack frame, given a name.
 fn push_frame(name: &str) {
@@ -93,7 +94,7 @@ fn pop_frame() {
 /// # Register a variable to a scope.
 /// Requires a name, which the language uses, and the compiled name,
 /// which should be *unique* and differ from the reference name to avoid data collisions.
-/// 
+///
 /// Currently does not check for unique compiled names, or whether
 /// the name is already in the scope.
 fn add_var_to_scope(name: String, compiled_name: String) {
@@ -143,10 +144,7 @@ pub(crate) fn eval_boolean(
 
     let mut res = Vec::<String>::new();
 
-    fn f(
-        res: &mut Vec<String>,
-        bin_op: crate::bools::BoolExpr,
-    ) -> () {
+    fn f(res: &mut Vec<String>, bin_op: crate::bools::BoolExpr) -> () {
         use crate::bools::{BinOpKind, BoolExpr as Expr};
 
         let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
@@ -206,18 +204,12 @@ pub(crate) fn eval_boolean(
 
 /// # Evaluate a math expression
 /// Will store the result in `destination`
-pub(crate) fn eval_math(
-    math: &str,
-    destination: &String,
-) -> Result<String> {
+pub(crate) fn eval_math(math: &str, destination: &String) -> Result<String> {
     let tt = crate::math::parse(math);
 
     let mut res = Vec::<String>::new();
 
-    fn f(
-        res: &mut Vec<String>,
-        bin_op: crate::math::MathExpr,
-    ) -> () {
+    fn f(res: &mut Vec<String>, bin_op: crate::math::MathExpr) -> () {
         use crate::math::{BinOpKind, MathExpr};
 
         let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
@@ -287,10 +279,12 @@ impl Parser {
         let seed = gen_seed!();
         let new_name = format!("$__VAL_INIT__#{seed}");
 
-        let mut val_init = VAL_INIT_REF.lock().unwrap();
+        // let mut val_init = VAL_INIT_REF.lock().unwrap();
 
-        *val_init = new_name.to_string();
-        drop(val_init);
+        unsafe {
+            VAL_INIT_REF = new_name.to_string();
+        }
+        // drop(val_init);
 
         let rule = input.as_rule();
 
@@ -325,7 +319,6 @@ impl Parser {
                 let mut inits = vec![];
 
                 let mut index: usize = 0;
-                // drop(vars);
 
                 let seed = gen_seed!();
                 let dest = format!("$__VAL_INIT__#{seed}");
@@ -337,7 +330,8 @@ impl Parser {
                     inits.push(temp_id.to_string());
                     index += 1;
 
-                    let c = VAL_INIT_REF.lock().unwrap();
+                    // drop(val_init);
+                    let c = unsafe { &VAL_INIT_REF };
 
                     buf.push_str(format!("{result}\r\nMOV {temp_id}, {c}\r\n",).as_str());
                 }
@@ -345,11 +339,14 @@ impl Parser {
                 let mut array_init = format!("DIM {dest}, ");
                 let mut cleanup = String::from("\r\n");
 
-                *VAL_INIT_REF.lock().unwrap() = dest;
+                unsafe {
+                    VAL_INIT_REF = dest;
+                }
 
                 for init in inits {
                     array_init.push_str(&(init.to_owned() + ","));
-                    cleanup.push_str(&("DROP ".to_owned() + init.as_str() + "\r\n")); // clean up
+                    cleanup.push_str(&("DROP ".to_owned() + init.as_str() + "\r\n"));
+                    // clean up
                 }
 
                 buf + array_init.as_str() + cleanup.as_str()
@@ -366,7 +363,20 @@ impl Parser {
 
                 loop {
                     let index = match children.next() {
-                        Some(s) => s.as_str(),
+                        Some(s) => match s.as_rule() {
+                            Rule::array_index_num => s.as_str(),
+                            Rule::val => {
+                                let init = Self::val(s)?;
+
+                                result.push_str(init.as_str());
+
+                                let ret = unsafe { &VAL_INIT_REF }.as_str();
+
+                                dbg!(ret);
+                                ret
+                            }
+                            _ => unreachable!(),
+                        },
                         None => break,
                     };
 
@@ -375,7 +385,10 @@ impl Parser {
                     );
                 }
 
-                format!("{result}MOV {new_name}, $__INDEXING_TEMP__")
+                // dbg!(&new_name);
+                let res = format!("{result}MOV {new_name}, $__INDEXING_TEMP__");
+                unsafe { VAL_INIT_REF = new_name };
+                res
             }
             Rule::boolean_group => eval_boolean(input.as_str(), &new_name)?,
             Rule::inline_boolean | Rule::boolean_prefix => {
@@ -398,19 +411,19 @@ impl Parser {
 
         let new_name = format!("${name}_{seed}");
 
-        let init = Self::val(val)?; // evaluate the 
+        let init = Self::val(val)?; // evaluate the
 
         add_var_to_scope(name.to_string(), new_name.to_string());
 
         Ok(format!(
             "{init}\r\nMOV {new_name}, {}",
-            *VAL_INIT_REF.lock().unwrap()
+            unsafe { &VAL_INIT_REF }
         ))
     }
 
     /// # Native statement implementation
     /// Native statements allow for .MMM code injection.
-    /// Allows references to local variables by their interpreted name, 
+    /// Allows references to local variables by their interpreted name,
     /// will search for their compiled name.
     fn native(input: Node) -> Result<String> {
         let code = input.children().next().unwrap().as_str();
@@ -476,7 +489,7 @@ impl Parser {
 
         let val_init = Self::val(val)?;
 
-        let val_init_dest = VAL_INIT_REF.lock().unwrap();
+        let val_init_dest = unsafe { &VAL_INIT_REF };
 
         let compiled_name = get_var_from_scope(&ident.to_string()).unwrap();
 
@@ -499,8 +512,8 @@ impl Parser {
             let val = param.children().next().unwrap();
             let init = Self::val(val).unwrap();
             result.push_str(&(init.as_str().to_owned() + "\r\n"));
-            let init_dest = VAL_INIT_REF.lock().unwrap();
-            val_inits.push(init_dest.clone());
+            let init_dest = unsafe { &VAL_INIT_REF };
+            val_inits.push(init_dest);
         }
 
         Ok(format!(
@@ -508,7 +521,7 @@ impl Parser {
             if val_inits.len() > 0 {
                 let mut buf = String::from("\r\nLOAD ");
                 for val_init in val_inits {
-                    buf.push_str((val_init + ",").as_str());
+                    buf.push_str((val_init.to_owned() + ",").as_str());
                 }
                 buf
             } else {
@@ -543,7 +556,7 @@ impl Parser {
 
         let compiled_name = get_var_from_scope(&ident.to_string()).unwrap();
 
-        let val_dest = VAL_INIT_REF.lock().unwrap();
+        let val_dest = unsafe { &VAL_INIT_REF };
 
         Ok(format!(
             "{val_init}\r\n{command} {compiled_name}, {val_dest}"
