@@ -357,36 +357,80 @@ impl Parser {
                 let ident = children.next().unwrap().as_str();
 
                 let mut result = format!(
-                    "MOV $__INDEXING_TEMP__, {}\r\n",
+                    "MOV $__INDEXING_TEMP@{seed}__, {}\r\n",
                     get_var_from_scope(&ident.to_string()).unwrap()
                 );
 
-                loop {
-                    let index = match children.next() {
-                        Some(s) => match s.as_rule() {
-                            Rule::array_index_num => s.as_str(),
-                            Rule::val => {
-                                let init = Self::val(s)?;
+                for index in children {
+                    // let i = index.children().next().unwrap();
+                    let i_obj = index.children().next().unwrap();
 
-                                result.push_str(init.as_str());
+                    match i_obj.as_rule() {
+                        Rule::array_index_num => result.push_str(
+                            format!(
+                                "AT $__INDEXING_TEMP@{seed}__, {}, $__INDEXING_TEMP@{seed}__\r\n",
+                                index.children().next().unwrap().as_str()
+                            )
+                            .as_str(),
+                        ),
+                        Rule::val => {
+                            dbg!(&i_obj);
+                            let v_init = Self::val(i_obj)?;
 
-                                let ret = unsafe { &VAL_INIT_REF }.as_str();
+                            let dest = unsafe { &VAL_INIT_REF };
 
-                                dbg!(ret);
-                                ret
-                            }
-                            _ => unreachable!(),
-                        },
-                        None => break,
-                    };
-
-                    result.push_str(
-                        format!("AT $__INDEXING_TEMP__, {index}, $__INDEXING_TEMP__\r\n").as_str(),
-                    );
+                            result.push_str(
+                                format!(
+                                    "{v_init}\r\nREM @@\r\nAT $__INDEXING_TEMP@{seed}__, {}, $__INDEXING_TEMP@{seed}__\r\n",
+                                    dest
+                                )
+                                .as_str(),
+                            )
+                        }
+                        _ => unimplemented!(),
+                    }
+                    dbg!(index);
                 }
 
+                // // loop {
+                //     let index = match children.next() {
+                //         Some(s) => match s.as_rule() {
+                //             Rule::index => unsafe {
+                //                 let to_index = s.children().next().unwrap();
+
+                //                 let i = match to_index.as_rule() {
+                //                     Rule::array_index_num => s.as_str(),
+                //                     Rule::val => {
+                //                         let init = Self::val(s)?;
+
+                //                         result.push_str(init.as_str());
+
+                //                         let ret = unsafe { &VAL_INIT_REF }.as_str();
+
+                //                         dbg!(ret);
+                //                         ret
+                //                     },
+                //                     _ => unreachable!()
+
+                //                 };
+
+                //                 dbg!(to_index);
+
+                //             },
+                //             _ => unreachable!(),
+                //         },
+                //         None => break,
+                //     };
+
+                //     result.push_str(
+                //         format!("AT $__INDEXING_TEMP__, {index}, $__INDEXING_TEMP__\r\n").as_str(),
+                //     );
+                // }
+
                 // dbg!(&new_name);
-                let res = format!("{result}MOV {new_name}, $__INDEXING_TEMP__");
+                
+
+                let res = format!("{result}MOV {new_name}, $__INDEXING_TEMP@{seed}__");
                 unsafe { VAL_INIT_REF = new_name };
                 res
             }
@@ -415,10 +459,9 @@ impl Parser {
 
         add_var_to_scope(name.to_string(), new_name.to_string());
 
-        Ok(format!(
-            "{init}\r\nMOV {new_name}, {}",
-            unsafe { &VAL_INIT_REF }
-        ))
+        Ok(format!("{init}\r\nMOV {new_name}, {}", unsafe {
+            &VAL_INIT_REF
+        }))
     }
 
     /// # Native statement implementation

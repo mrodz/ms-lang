@@ -106,9 +106,10 @@ array = { "[" ~ ((val ~ ",")* ~ val)? ~ "]" }
 
 array_index_num = { ASCII_DIGIT{1,} }
 
-array_index = { ident ~ ("[" ~ (array_index_num | val) ~ "]")+ }
+array_index = { ident ~ index+ }
+index = { "[" ~ (array_index_num | val) ~ "]" }
 
-val = { (array_index | array) | (inline_boolean | inline_math) | (boolean_primary | primary) | (string_literal_double | string_literal_single) | function_call | ident }
+val = { ((array_index) | array) | (inline_boolean | inline_math) | (boolean_primary | primary) | (string_literal_double | string_literal_single) | function_call | ident }
 
 variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
 variable_reassign = { ident ~ "=" ~ val ~ ";" }

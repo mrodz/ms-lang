@@ -272,8 +272,8 @@ mod commands {
                             }
                             None => {
                                 return Err(MountError::new(format!(
-                                    "Index out of bounds on line {}: {index}",
-                                    ctx.number
+                                    "Index out of bounds on line {}: {index} >= len({})",
+                                    ctx.number, d.len()
                                 )))
                             }
                         }
