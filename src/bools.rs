@@ -7,7 +7,7 @@ use pest::Parser;
 use pest_derive::Parser;
 
 #[derive(Parser)]
-#[grammar = "bool_grammar.pest"]
+#[grammar = "grammar.pest"]
 pub struct TokenTreeParser;
 
 use pratt::{Affix, Associativity, PrattParser, Precedence, Result};
@@ -94,9 +94,6 @@ where
             "&&" => BinOpKind::And,
             "||" => BinOpKind::Or,
             "^" => BinOpKind::Xor,
-            // "/" => BinOpKind::Div,
-            // "%" => BinOpKind::Mod,
-            // "=" => BinOpKind::Eq,
             _ => unreachable!(),
         };
         Ok(BoolExpr::BinOp(Box::new(lhs), op, Box::new(rhs)))
@@ -106,20 +103,13 @@ where
     fn prefix(&mut self, tree: Self::Input, rhs: BoolExpr) -> Result<BoolExpr> {
         let op = match tree.as_str() {
             "!" => UnOpKind::Not,
-            // "-" => UnOpKind::Neg,
             _ => unreachable!(),
         };
         Ok(BoolExpr::UnOp(op, Box::new(rhs)))
     }
 
-    // Construct a unary postfix expression, e.g. 1?
     fn postfix(&mut self, _lhs: BoolExpr, _tree: Self::Input) -> Result<BoolExpr> {
         unimplemented!()
-        // let op = match tree.as_str() {
-        //     "?" => UnOpKind::Try,
-        //     _ => unreachable!(),
-        // };
-        // Ok(BoolExpr::UnOp(op, Box::new(lhs)))
     }
 }
 
@@ -129,18 +119,3 @@ pub fn parse(input: &str) -> BoolExpr {
         .into_iter();
     ExprParser.parse(tt.into_iter()).unwrap()
 }
-
-// fn main() {
-//     let mut args = std::env::args();
-//     let _ = args.next();
-
-//     let input = args.next().expect("Expected input string");
-//     println!("Code: {}", input);
-
-//     let tt = TokenTreeParser::parse(Rule::group, &input).unwrap_or_else(|e| panic!("{}", e));
-//     println!("TokenTree: {:?}", tt);
-
-//     let expr = ExprParser.parse(tt.into_iter()).unwrap();
-//     println!("Expression: {:?}", expr);
-// }
-

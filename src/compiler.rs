@@ -7,11 +7,12 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::prelude::*;
-use std::result;
 use std::sync::Mutex;
 
 type Result<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, ()>;
+
+
 
 #[derive(ParserDerive)]
 #[grammar = "grammar.pest"]
@@ -24,18 +25,8 @@ struct StackFrame {
     depth: usize,
 }
 
-// impl Debug for StackFrame {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "")
-//     }
-// }
-
 impl StackFrame {
     pub fn new(name: &str, inherit_from: usize) -> Self {
-        // let stack = CALL_STACK.lock().unwrap();
-        // let active_vars = stack.get(stack.len() - 1).unwrap().variables;
-        // let cloned = active_vars.clone();
-
         Self {
             name: name.to_string(),
             variables: HashMap::new(),
@@ -65,7 +56,6 @@ impl StackFrame {
         }
 
         None
-        // self.variables.get(scope_name)
     }
 }
 
@@ -137,7 +127,6 @@ macro_rules! gen_seed {
 /// Will store the result in `destination`
 pub(crate) fn eval_boolean(
     math: &str,
-    // vars: &HashMap<String, String>,
     destination: &String,
 ) -> Result<String> {
     let tt = crate::bools::parse(math);
@@ -157,14 +146,12 @@ pub(crate) fn eval_boolean(
                     BinOpKind::Xor => "XOR",
                 };
 
-                // res.push(format!("SET {first_op}, 0"));
-                f(/*vars,*/ res, *first);
+                f(res, *first);
                 res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
 
                 let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
 
-                // res.push(format!("SET {second_op}, 0"));
-                f(/*vars,*/ res, *second);
+                f(res, *second);
 
                 res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
 
@@ -175,7 +162,7 @@ pub(crate) fn eval_boolean(
                 res.push(format!("DROP {first_op}\r\nDROP {second_op}"));
             }
             Expr::UnOp(_, expr) => {
-                f(/*vars,*/ res, *expr);
+                f(res, *expr);
 
                 res.push(format!("NOT $__MATH_RESULT__"));
             }
@@ -190,7 +177,7 @@ pub(crate) fn eval_boolean(
         }
     }
 
-    f(/*&vars, */ &mut res, tt);
+    f(&mut res, tt);
     res.push(format!("MOV {destination}, $__MATH_RESULT__"));
 
     let mut buf = String::new();
@@ -224,13 +211,11 @@ pub(crate) fn eval_math(math: &str, destination: &String) -> Result<String> {
                     BinOpKind::Div => "DIV",
                 };
 
-                // res.push(format!("SET {first_op}, 0"));
                 f(res, *first);
                 res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
 
                 let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
 
-                // res.push(format!("SET {second_op}, 0"));
                 f(res, *second);
 
                 res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
@@ -279,12 +264,9 @@ impl Parser {
         let seed = gen_seed!();
         let new_name = format!("$__VAL_INIT__#{seed}");
 
-        // let mut val_init = VAL_INIT_REF.lock().unwrap();
-
         unsafe {
             VAL_INIT_REF = new_name.to_string();
         }
-        // drop(val_init);
 
         let rule = input.as_rule();
 
@@ -296,7 +278,6 @@ impl Parser {
                 let d = input.as_str().to_string();
                 format!("SET {new_name}, {d}")
             }
-
             Rule::function_call => Self::function_call(input)?.to_string(),
             Rule::ident => {
                 let mut buf = String::new();
@@ -330,7 +311,6 @@ impl Parser {
                     inits.push(temp_id.to_string());
                     index += 1;
 
-                    // drop(val_init);
                     let c = unsafe { &VAL_INIT_REF };
 
                     buf.push_str(format!("{result}\r\nMOV {temp_id}, {c}\r\n",).as_str());
@@ -346,7 +326,6 @@ impl Parser {
                 for init in inits {
                     array_init.push_str(&(init.to_owned() + ","));
                     cleanup.push_str(&("DROP ".to_owned() + init.as_str() + "\r\n"));
-                    // clean up
                 }
 
                 buf + array_init.as_str() + cleanup.as_str()
@@ -362,7 +341,6 @@ impl Parser {
                 );
 
                 for index in children {
-                    // let i = index.children().next().unwrap();
                     let i_obj = index.children().next().unwrap();
 
                     match i_obj.as_rule() {
@@ -374,70 +352,27 @@ impl Parser {
                             .as_str(),
                         ),
                         Rule::val => {
-                            dbg!(&i_obj);
                             let v_init = Self::val(i_obj)?;
 
                             let dest = unsafe { &VAL_INIT_REF };
 
                             result.push_str(
                                 format!(
-                                    "{v_init}\r\nREM @@\r\nAT $__INDEXING_TEMP@{seed}__, {}, $__INDEXING_TEMP@{seed}__\r\n",
+                                    "{v_init}\r\nAT $__INDEXING_TEMP@{seed}__, {}, $__INDEXING_TEMP@{seed}__\r\n",
                                     dest
-                                )
-                                .as_str(),
+                                ).as_str(),
                             )
                         }
                         _ => unimplemented!(),
                     }
-                    dbg!(index);
                 }
-
-                // // loop {
-                //     let index = match children.next() {
-                //         Some(s) => match s.as_rule() {
-                //             Rule::index => unsafe {
-                //                 let to_index = s.children().next().unwrap();
-
-                //                 let i = match to_index.as_rule() {
-                //                     Rule::array_index_num => s.as_str(),
-                //                     Rule::val => {
-                //                         let init = Self::val(s)?;
-
-                //                         result.push_str(init.as_str());
-
-                //                         let ret = unsafe { &VAL_INIT_REF }.as_str();
-
-                //                         dbg!(ret);
-                //                         ret
-                //                     },
-                //                     _ => unreachable!()
-
-                //                 };
-
-                //                 dbg!(to_index);
-
-                //             },
-                //             _ => unreachable!(),
-                //         },
-                //         None => break,
-                //     };
-
-                //     result.push_str(
-                //         format!("AT $__INDEXING_TEMP__, {index}, $__INDEXING_TEMP__\r\n").as_str(),
-                //     );
-                // }
-
-                // dbg!(&new_name);
-                
 
                 let res = format!("{result}MOV {new_name}, $__INDEXING_TEMP@{seed}__");
                 unsafe { VAL_INIT_REF = new_name };
                 res
             }
             Rule::boolean_group => eval_boolean(input.as_str(), &new_name)?,
-            Rule::inline_boolean | Rule::boolean_prefix => {
-                eval_boolean(&("(".to_owned() + input.as_str() + ")"), &new_name)?
-            }
+            Rule::inline_boolean | Rule::boolean_prefix => eval_boolean(&("(".to_owned() + input.as_str() + ")"), &new_name)?,
             _ => panic!("undefined rule: {:?}", rule),
         });
 
@@ -690,9 +625,8 @@ impl Parser {
                     .lock()
                     .unwrap()
                     .push(Self::variable(decl)?.to_owned()),
-                // Rule::function => result.push_str(Self::function(variable)?.as_str()),
                 Rule::function => result.push_str(Self::function(decl)?.as_str()),
-                _ => panic!("other"),
+                _ => unreachable!(),
             }
         }
 
@@ -721,11 +655,7 @@ impl Parser {
 
         result.push("~__GLOBALS__\r\nSET $__MATH_RESULT__, 0".into());
 
-        // CALL_STACK.lock().unwrap().push(StackFrame::new("__GLOBALS__"));
-
         for var in GLOBAL_VARS.lock().unwrap().iter() {
-            // let mut num = LINE_NUMBER.lock().unwrap();
-            // num.add_assign(10);
             result.push(var.to_string())
         }
 

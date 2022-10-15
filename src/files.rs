@@ -223,20 +223,14 @@ mod commands {
 
     fn index_or_val(str: &String, variables: &mut VarMapping) -> Option<usize> {
         if str.starts_with('$') {
-            dbg!("var");
-
             if let Some(Variable::Number(var)) = variables.get(str) {
-                dbg!(str);
                 Some(*var as usize)
             } else {
-                dbg!("not number");
                 None
             }
         } else if let Ok(index) = str.parse::<usize>() {
-            dbg!("num");
             return Some(index)
         } else {
-            dbg!("none");
             None
         }
     }
@@ -262,11 +256,9 @@ mod commands {
                 }
 
                 if let Some(d) = variables.get(var) {
-                    dbg!(&d);
                     if let Variable::Dim(d) = d {
                         match d.get(index) {
                             Some(v) => {
-                                dbg!("in bounds", v, &dest);
                                 let cloned = v.clone();
                                 variables.insert(dest.to_string(), cloned);
                             }
@@ -280,7 +272,6 @@ mod commands {
 
                         Ok(())
                     } else {
-                        dbg!(var);
                         Err(MountError::new(
                             format!("Invalid data types on line {}: Expected <dim>, found {:?}", ctx.number, d)
                                 .to_string(),
@@ -438,9 +429,6 @@ mod commands {
         _function_context: &FunctionContext,
         _functions: &GlobalFunctions,
     ) -> CommandRet {
-        // let args = &ctx.arguments;
-        // let len = args.len();
-        // dbg!((len < 1));
         if ctx.arguments.len() >= 1 {
             let name = ctx.arguments.get(0).unwrap();
             if let Some('$') = name.chars().next() {
@@ -1045,7 +1033,6 @@ mod built_in_functions {
         let mut string_buf = String::new();
 
         for var in loaded_variables {
-            // dbg!(&var.to_string());
             string_buf.push_str(&var.to_string());
             string_buf.push(' ');
         }
