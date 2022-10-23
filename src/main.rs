@@ -1,4 +1,3 @@
-mod bools;
 mod compiler;
 mod files;
 mod math;

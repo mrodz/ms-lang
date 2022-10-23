@@ -7,12 +7,14 @@ underscore = { "_" }
 
 WHITESPACE = _{ " " | NEWLINE }
 COMMENT = _{ "//" }
+
+keywords = _{ "native" | "func" | "var" | "return" | "true" | "false" | "if" | "else" }
 // END Constants
 
 // This is a any valid identity.
 // - Function names
 // - Variable names
-ident = @{ !digit ~ (alpha | digit | underscore)+ }
+ident = @{ !keywords ~ (!digit ~ (alpha | digit | underscore)+) }
 
 // START Strings
 string_literal_inner_d = { ((!quote_d) ~ ANY)* }
@@ -29,6 +31,8 @@ function_arguments = { (ident ~ ("," ~ ident)*)? }
 
 function = { "func" ~ ident ~ "(" ~ function_arguments ~ ")" ~ "{" ~ function_body ~ "}"}
 
+return_statement = { "return" ~ val? ~ ";" }
+
 function_body = {
 	(((statement))*)
 }
@@ -42,7 +46,7 @@ native = { "native" ~ "\"" ~ native_capture ~ "\"" ~ ";" }
 statement = { 
     (
         (
-            variable | variable_reassign | shorthand_assign
+            variable | variable_reassign | shorthand_assign | return_statement
         ) 
         | 
         (
@@ -57,36 +61,9 @@ b_true = { "true" }
 b_false = { "false" }
 boolean = { b_true | b_false }
 
-boolean_infix = { "&&" | "||" | "^" }
-boolean_prefix = { "!" }
-boolean_group = { 
-    boolean_prefix* ~ boolean_primary ~ (
-        boolean_infix ~ boolean_prefix* ~ boolean_primary
-    )* 
-}
-boolean_primary = _{ 
-    boolean_prefix* ~ 
-    (
-        (boolean)
-        | ident
-    ) 
-    | "(" ~ boolean_group ~ ")" 
-}
-inline_boolean = { 
-    (
-        boolean_prefix* ~ (
-            (boolean) | ident
-        )
-    ) ~ (
-        boolean_infix ~ boolean_prefix* ~ (
-            (boolean) | ident
-        )
-    )+ 
-}
-
 block = { "{" ~ statement* ~ "}" }
 
-if_statement = { "if" ~ (ident | inline_boolean | boolean_primary) ~ block ~ ("else" ~ (if_statement | block))? }
+if_statement = { "if" ~ (ident | boolean | function_call) ~ block ~ ("else" ~ (if_statement | block))? }
 // END If statement
 
 // START Math
@@ -109,7 +86,7 @@ array_index_num = { ASCII_DIGIT{1,} }
 array_index = { ident ~ index+ }
 index = { "[" ~ (array_index_num | val) ~ "]" }
 
-val = { ((array_index) | array) | (inline_boolean | inline_math) | (boolean_primary | primary) | (string_literal_double | string_literal_single) | function_call | ident }
+val = { ((array_index) | array) | function_call | (inline_math) | (primary) | (string_literal_double | string_literal_single) | boolean | ident }
 
 variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
 variable_reassign = { ident ~ "=" ~ val ~ ";" }

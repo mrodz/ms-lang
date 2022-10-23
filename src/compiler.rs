@@ -23,6 +23,7 @@ struct StackFrame {
     name: String,
     variables: HashMap<String, String>,
     depth: usize,
+    // popped: bool
 }
 
 impl StackFrame {
@@ -46,10 +47,9 @@ impl StackFrame {
     pub fn find_compiled_name(
         &self,
         scope_name: &String,
-        stack: &Vec<StackFrame>,
     ) -> Option<String> {
         for i in (0..=self.depth).rev() {
-            match stack.get(i).unwrap().variables.get(scope_name) {
+            match unsafe { CALL_STACK.get(i) }.unwrap().variables.get(scope_name) {
                 Some(name) => return Some(name.to_string()),
                 None => continue,
             }
@@ -64,21 +64,30 @@ lazy_static! {
     static ref FUNCTION_MAPPING: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
     static ref GLOBAL_VARS: Mutex<Vec<String>> = Mutex::new(Vec::new());
     static ref LINE_NUMBER: Mutex<u32> = Mutex::new(0);
-    static ref CALL_STACK: Mutex<Vec<StackFrame>> = Mutex::new(Vec::new());
+    // static ref CALL_STACK: Mutex<Vec<StackFrame>> = Mutex::new(Vec::new());
 }
 
 static mut VAL_INIT_REF: String = String::new();
+static mut CALL_STACK: Vec<StackFrame> = vec![];
 
 /// # Add a new stack frame, given a name.
 fn push_frame(name: &str) {
-    let mut stack = CALL_STACK.lock().unwrap();
-    let len = stack.len();
-    stack.push(StackFrame::new(name, len));
+
+    unsafe {
+        CALL_STACK.push(StackFrame::new(name, CALL_STACK.len()))
+    }
+
+    // let mut stack = CALL_STACK.lock().unwrap();
+    // let len = stack.len();
+    // stack.push(StackFrame::new(name, len));
 }
 
 /// # Pop the top stack frame.
 fn pop_frame() {
-    CALL_STACK.lock().unwrap().pop();
+    unsafe {
+        CALL_STACK.pop();
+    }
+    // CALL_STACK.lock().unwrap().pop();
 }
 
 /// # Register a variable to a scope.
@@ -88,30 +97,30 @@ fn pop_frame() {
 /// Currently does not check for unique compiled names, or whether
 /// the name is already in the scope.
 fn add_var_to_scope(name: String, compiled_name: String) {
-    let mut stack = CALL_STACK.lock().unwrap();
-    let i = stack.len() - 1;
-    let top: &mut StackFrame = stack.get_mut(i).unwrap();
+    let top = unsafe {
+        let i = CALL_STACK.len() - 1;
+        CALL_STACK.get_mut(i).unwrap()
+    }; 
 
     top.add_var(name, compiled_name);
-
-    drop(stack);
 }
 
 /// # Get the compiled name of a variable.
 /// Will be `Some` is the variable is accessible from the current scope,
 /// otherwise will be `None`.
 fn get_var_from_scope(name: &String) -> Option<String> {
-    let stack = CALL_STACK.lock().unwrap();
+    // let stack = unsafe {} CALL_STACK.lock().unwrap();
 
-    let i = stack.len() - 1;
-    let top: &StackFrame = stack.get(i).unwrap();
+    // let i = stack.len() - 1;
+    let (i, top) = unsafe {
+        let i = CALL_STACK.len() - 1;
+        (i, CALL_STACK.get(i).unwrap())
+    }; 
 
-    let result = match top.find_compiled_name(name, &stack) {
+    let result = match top.find_compiled_name(name) {
         Some(str) => Some(str.to_string()),
         None => None,
     };
-
-    drop(stack);
 
     result
 }
@@ -121,72 +130,6 @@ macro_rules! gen_seed {
         let mut rng = thread_rng();
         rng.gen::<u32>()
     }};
-}
-
-/// # Evaluate a boolean expression
-/// Will store the result in `destination`
-pub(crate) fn eval_boolean(
-    math: &str,
-    destination: &String,
-) -> Result<String> {
-    let tt = crate::bools::parse(math);
-
-    let mut res = Vec::<String>::new();
-
-    fn f(res: &mut Vec<String>, bin_op: crate::bools::BoolExpr) -> () {
-        use crate::bools::{BinOpKind, BoolExpr as Expr};
-
-        let first_op = format!("$__MATH_TEMP__#{}", gen_seed!());
-
-        match bin_op {
-            Expr::BinOp(first, op, second) => {
-                let cmd = match op {
-                    BinOpKind::And => "AND",
-                    BinOpKind::Or => "OR",
-                    BinOpKind::Xor => "XOR",
-                };
-
-                f(res, *first);
-                res.push(format!("MOV {first_op}, $__MATH_RESULT__"));
-
-                let second_op = format!("$__MATH_TEMP__#{}", gen_seed!());
-
-                f(res, *second);
-
-                res.push(format!("MOV {second_op}, $__MATH_RESULT__"));
-
-                res.push(format!("MOV $__MATH_RESULT__, {first_op}"));
-
-                res.push(format!("{cmd} $__MATH_RESULT__, {second_op}"));
-
-                res.push(format!("DROP {first_op}\r\nDROP {second_op}"));
-            }
-            Expr::UnOp(_, expr) => {
-                f(res, *expr);
-
-                res.push(format!("NOT $__MATH_RESULT__"));
-            }
-            Expr::Boolean(n) => {
-                res.push(format!("SET $__MATH_RESULT__, {n}"));
-            }
-            Expr::Variable(name) => {
-                let reference = get_var_from_scope(&name).unwrap();
-
-                res.push(format!("MOV $__MATH_RESULT__, {}", reference));
-            }
-        }
-    }
-
-    f(&mut res, tt);
-    res.push(format!("MOV {destination}, $__MATH_RESULT__"));
-
-    let mut buf = String::new();
-
-    for line in res {
-        buf.push_str(&(line.to_owned() + "\r\n"))
-    }
-
-    Ok(buf)
 }
 
 /// # Evaluate a math expression
@@ -278,7 +221,10 @@ impl Parser {
                 let d = input.as_str().to_string();
                 format!("SET {new_name}, {d}")
             }
-            Rule::function_call => Self::function_call(input)?.to_string(),
+            Rule::function_call => {
+                let function_call = Self::function_call(input)?.to_string();
+                format!("{function_call}\r\nMOV {new_name}, $__RET__")
+            }
             Rule::ident => {
                 let mut buf = String::new();
 
@@ -371,8 +317,8 @@ impl Parser {
                 unsafe { VAL_INIT_REF = new_name };
                 res
             }
-            Rule::boolean_group => eval_boolean(input.as_str(), &new_name)?,
-            Rule::inline_boolean | Rule::boolean_prefix => eval_boolean(&("(".to_owned() + input.as_str() + ")"), &new_name)?,
+            // Rule::boolean_group => eval_boolean(input.as_str(), &new_name)?,
+            // Rule::inline_boolean | Rule::boolean_prefix => eval_boolean(&("(".to_owned() + input.as_str() + ")"), &new_name)?,
             _ => panic!("undefined rule: {:?}", rule),
         });
 
@@ -541,6 +487,22 @@ impl Parser {
         ))
     }
 
+    fn return_statement(input: Node) -> Result<String> {
+        let val = input.children().next().unwrap();
+
+        let val_init = Self::val(val)?;
+
+        // unsafe {
+        //     dbg!(&VAL_INIT_REF);
+        // }
+
+        // unsafe {
+        //     CALL_STACK.get_mut(CALL_STACK.len() - 1).unwrap().popped = true;
+        // }
+        
+        Ok(format!("{val_init}\r\nMOV $__RET__, {}", unsafe { &VAL_INIT_REF }))
+    }
+
     /// # Function Bodies
     /// Iterate over each statement in a function, run/evauluate the code.
     fn function_body(input: Node) -> Result<Vec<String>> {
@@ -554,6 +516,10 @@ impl Parser {
                     Rule::function_call => result.push(Self::function_call(part)? + "\r\n"),
                     Rule::variable_reassign => result.push(Self::variable_reassign(part)? + "\r\n"),
                     Rule::shorthand_assign => result.push(Self::shorthand_assign(part)? + "\r\n"),
+                    Rule::return_statement => {
+                        result.push(Self::return_statement(part)? + "\r\n");
+                        return Ok(result)
+                    }
                     _ => panic!("not implemented: {:?}", rule),
                 }
             }
