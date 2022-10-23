@@ -12,8 +12,6 @@ use std::sync::Mutex;
 type Result<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 
-
-
 #[derive(ParserDerive)]
 #[grammar = "grammar.pest"]
 struct Parser;
@@ -60,26 +58,25 @@ impl StackFrame {
 }
 
 lazy_static! {
-    // static ref VARIABLE_MAPPING: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
     static ref FUNCTION_MAPPING: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
     static ref GLOBAL_VARS: Mutex<Vec<String>> = Mutex::new(Vec::new());
     static ref LINE_NUMBER: Mutex<u32> = Mutex::new(0);
-    // static ref CALL_STACK: Mutex<Vec<StackFrame>> = Mutex::new(Vec::new());
 }
 
 static mut VAL_INIT_REF: String = String::new();
 static mut CALL_STACK: Vec<StackFrame> = vec![];
 
+macro_rules! top_frame {
+    () => {
+        unsafe { CALL_STACK.get_mut(CALL_STACK.len() - 1) }.unwrap()
+    }
+}
+
 /// # Add a new stack frame, given a name.
 fn push_frame(name: &str) {
-
     unsafe {
         CALL_STACK.push(StackFrame::new(name, CALL_STACK.len()))
     }
-
-    // let mut stack = CALL_STACK.lock().unwrap();
-    // let len = stack.len();
-    // stack.push(StackFrame::new(name, len));
 }
 
 /// # Pop the top stack frame.
@@ -87,7 +84,6 @@ fn pop_frame() {
     unsafe {
         CALL_STACK.pop();
     }
-    // CALL_STACK.lock().unwrap().pop();
 }
 
 /// # Register a variable to a scope.
@@ -97,11 +93,7 @@ fn pop_frame() {
 /// Currently does not check for unique compiled names, or whether
 /// the name is already in the scope.
 fn add_var_to_scope(name: String, compiled_name: String) {
-    let top = unsafe {
-        let i = CALL_STACK.len() - 1;
-        CALL_STACK.get_mut(i).unwrap()
-    }; 
-
+    let top = top_frame!();
     top.add_var(name, compiled_name);
 }
 
@@ -109,13 +101,7 @@ fn add_var_to_scope(name: String, compiled_name: String) {
 /// Will be `Some` is the variable is accessible from the current scope,
 /// otherwise will be `None`.
 fn get_var_from_scope(name: &String) -> Option<String> {
-    // let stack = unsafe {} CALL_STACK.lock().unwrap();
-
-    // let i = stack.len() - 1;
-    let (i, top) = unsafe {
-        let i = CALL_STACK.len() - 1;
-        (i, CALL_STACK.get(i).unwrap())
-    }; 
+    let top = top_frame!();
 
     let result = match top.find_compiled_name(name) {
         Some(str) => Some(str.to_string()),
@@ -196,138 +182,136 @@ pub(crate) fn eval_math(math: &str, destination: &String) -> Result<String> {
     Ok(buf)
 }
 
+fn gen_val_init(input: Node) -> Result<String> {
+    let input = input.children().next().unwrap();
+
+    let seed = gen_seed!();
+    let new_name = format!("$__VAL_INIT__#{seed}");
+
+    unsafe {
+        VAL_INIT_REF = new_name.to_string();
+    }
+
+    let rule = input.as_rule();
+
+    let ret = Ok(match rule {
+        Rule::number
+        | Rule::boolean
+        | Rule::string_literal_double
+        | Rule::string_literal_single => {
+            let d = input.as_str().to_string();
+            format!("SET {new_name}, {d}")
+        }
+        Rule::function_call => {
+            let function_call = Parser::function_call(input)?.to_string();
+            unsafe { VAL_INIT_REF = new_name.to_string() };
+            format!("{function_call}\r\nMOV {new_name}, $__RET__")
+        }
+        Rule::ident => {
+            let mut buf = String::new();
+
+            let other = input.as_str();
+
+            buf = buf
+                + format!(
+                    "MOV {new_name}, {}\r\n",
+                    get_var_from_scope(&other.to_string()).expect(format!("{new_name} is not in scope.").as_str())
+                )
+                .as_str();
+
+            buf
+        }
+        Rule::inline_math => eval_math(&("(".to_owned() + input.as_str() + ")"), &new_name)?,
+        Rule::group => eval_math(input.as_str(), &new_name)?,
+        Rule::array => {
+            let mut buf = String::new();
+            let mut inits = vec![];
+
+            let mut index: usize = 0;
+
+            let seed = gen_seed!();
+            let dest = format!("$__VAL_INIT__#{seed}");
+
+            for var in input.children() {
+                let result = Parser::val(var).unwrap();
+
+                let temp_id = format!("$__ARR_INIT_{index}@{seed}__");
+                inits.push(temp_id.to_string());
+                index += 1;
+
+                let c = unsafe { &VAL_INIT_REF };
+
+                buf.push_str(format!("{result}\r\nMOV {temp_id}, {c}\r\n",).as_str());
+            }
+
+            let mut array_init = format!("DIM {dest}, ");
+            let mut cleanup = String::from("\r\n");
+
+            unsafe {
+                VAL_INIT_REF = dest;
+            }
+
+            for init in inits {
+                array_init.push_str(&(init.to_owned() + ","));
+                cleanup.push_str(&("DROP ".to_owned() + init.as_str() + "\r\n"));
+            }
+
+            buf + array_init.as_str() + cleanup.as_str()
+        }
+        Rule::array_index => {
+            let mut children = input.children();
+
+            let ident = children.next().unwrap().as_str();
+
+            let mut result = format!(
+                "MOV $__INDEXING_TEMP@{seed}__, {}\r\n",
+                get_var_from_scope(&ident.to_string()).unwrap()
+            );
+
+            for index in children {
+                let i_obj = index.children().next().unwrap();
+
+                match i_obj.as_rule() {
+                    Rule::array_index_num => result.push_str(
+                        format!(
+                            "AT $__INDEXING_TEMP@{seed}__, {}, $__INDEXING_TEMP@{seed}__\r\n",
+                            index.children().next().unwrap().as_str()
+                        )
+                        .as_str(),
+                    ),
+                    Rule::val => {
+                        let v_init = Parser::val(i_obj)?;
+
+                        let dest = unsafe { &VAL_INIT_REF };
+
+                        result.push_str(
+                            format!(
+                                "{v_init}\r\nAT $__INDEXING_TEMP@{seed}__, {}, $__INDEXING_TEMP@{seed}__\r\n",
+                                dest
+                            ).as_str(),
+                        )
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+
+            let res = format!("{result}MOV {new_name}, $__INDEXING_TEMP@{seed}__");
+            unsafe { VAL_INIT_REF = new_name };
+            res
+        }
+        _ => panic!("undefined rule: {:?}", rule),
+    });
+
+    ret
+}
+
 /// # The Pest Language Parser
 #[pest_consume::parser]
 impl Parser {
     /// # Evaluate *any* "val" rule.
     /// Will store the result in the register stored at VAL_INIT_REF
     fn val(input: Node) -> Result<String> {
-        let input = input.children().next().unwrap();
-
-        let seed = gen_seed!();
-        let new_name = format!("$__VAL_INIT__#{seed}");
-
-        unsafe {
-            VAL_INIT_REF = new_name.to_string();
-        }
-
-        let rule = input.as_rule();
-
-        let ret = Ok(match rule {
-            Rule::number
-            | Rule::boolean
-            | Rule::string_literal_double
-            | Rule::string_literal_single => {
-                let d = input.as_str().to_string();
-                format!("SET {new_name}, {d}")
-            }
-            Rule::function_call => {
-                let function_call = Self::function_call(input)?.to_string();
-                unsafe { VAL_INIT_REF = new_name.to_string() };
-                format!("{function_call}\r\nMOV {new_name}, $__RET__")
-            }
-            Rule::ident => {
-                let mut buf = String::new();
-
-                let other = input.as_str();
-
-                buf = buf
-                    + format!(
-                        "MOV {new_name}, {}\r\n",
-                        get_var_from_scope(&other.to_string()).unwrap()
-                    )
-                    .as_str();
-
-                buf
-            }
-            Rule::inline_math => eval_math(&("(".to_owned() + input.as_str() + ")"), &new_name)?,
-            Rule::group => eval_math(input.as_str(), &new_name)?,
-            Rule::array => {
-                let mut buf = String::new();
-                let mut inits = vec![];
-
-                let mut index: usize = 0;
-
-                let seed = gen_seed!();
-                let dest = format!("$__VAL_INIT__#{seed}");
-
-                for var in input.children() {
-                    let result = Self::val(var).unwrap();
-
-                    let temp_id = format!("$__ARR_INIT_{index}@{seed}__");
-                    inits.push(temp_id.to_string());
-                    index += 1;
-
-                    let c = unsafe { &VAL_INIT_REF };
-
-                    buf.push_str(format!("{result}\r\nMOV {temp_id}, {c}\r\n",).as_str());
-                }
-
-                let mut array_init = format!("DIM {dest}, ");
-                let mut cleanup = String::from("\r\n");
-
-                unsafe {
-                    VAL_INIT_REF = dest;
-                }
-
-                for init in inits {
-                    array_init.push_str(&(init.to_owned() + ","));
-                    cleanup.push_str(&("DROP ".to_owned() + init.as_str() + "\r\n"));
-                }
-
-                buf + array_init.as_str() + cleanup.as_str()
-            }
-            Rule::array_index => {
-                let mut children = input.children();
-
-                let ident = children.next().unwrap().as_str();
-
-                let mut result = format!(
-                    "MOV $__INDEXING_TEMP@{seed}__, {}\r\n",
-                    get_var_from_scope(&ident.to_string()).unwrap()
-                );
-
-                for index in children {
-                    let i_obj = index.children().next().unwrap();
-
-                    match i_obj.as_rule() {
-                        Rule::array_index_num => result.push_str(
-                            format!(
-                                "AT $__INDEXING_TEMP@{seed}__, {}, $__INDEXING_TEMP@{seed}__\r\n",
-                                index.children().next().unwrap().as_str()
-                            )
-                            .as_str(),
-                        ),
-                        Rule::val => {
-                            let v_init = Self::val(i_obj)?;
-
-                            let dest = unsafe { &VAL_INIT_REF };
-
-                            result.push_str(
-                                format!(
-                                    "{v_init}\r\nAT $__INDEXING_TEMP@{seed}__, {}, $__INDEXING_TEMP@{seed}__\r\n",
-                                    dest
-                                ).as_str(),
-                            )
-                        }
-                        _ => unimplemented!(),
-                    }
-                }
-
-                let res = format!("{result}MOV {new_name}, $__INDEXING_TEMP@{seed}__");
-                unsafe { VAL_INIT_REF = new_name };
-                res
-            }
-            // Rule::is_statement => {
-            //     let init = Self::is_statement(input)?;
-            //     format!("MOV {new_name}, {}\r\n", unsafe { &VAL_INIT_REF })
-            // }
-            // Rule::boolean_group => eval_boolean(input.as_str(), &new_name)?,
-            // Rule::inline_boolean | Rule::boolean_prefix => eval_boolean(&("(".to_owned() + input.as_str() + ")"), &new_name)?,
-            _ => panic!("undefined rule: {:?}", rule),
-        });
-
-        ret
+        gen_val_init(input)
     }
 
     /// # Variable declaration
@@ -492,19 +476,51 @@ impl Parser {
         ))
     }
 
-    fn if_statement(input: Node) -> Result<String> {
-        todo!();
+    fn if_statement(input: Node) -> Result<(String, (String, Option<String>))> {
+        dbg!(&top_frame!().name);
+        
         let mut children = input.children();
 
         let condition = children.next().unwrap();
 
-        let condition_init = Self::val(condition)?;
+        dbg!(&condition);
 
-        let if_true = children.next().unwrap();
+        let condition_init = gen_val_init(input)?;
 
-        dbg!(if_true);
+        let condition_init_dest = unsafe { &VAL_INIT_REF }.to_string();
 
-        todo!()
+        let if_true = Self::function_body(children.next().unwrap())?;
+        
+        let if_false = if let Some(else_block) = children.next() {
+            Some(Self::function_body(else_block)?)
+        } else {
+            None
+        };
+
+        let seed = gen_seed!();
+        let name1 = format!("{}::if#{}", top_frame!().name, seed);
+        let name2 = format!("{}::else#{}", top_frame!().name, seed);
+
+        Ok((
+            format!("{condition_init}\r\nIF {condition_init_dest}, {name1}, {}", if if_false.is_some() {name2.to_string()} else {"".to_string()}),
+            (
+                format!("\r\n~{name1}\r\n{}\r\n", {
+                    let mut buf = String::new();
+                    for line in if_true {
+                        buf.push_str((line + "\r\n").as_str())
+                    }
+                    buf
+                }),
+                if let Some(else_code) = if_false {
+                    let mut buf = format!("\r\n~{}\r\n", &name2);
+                    for line in else_code {
+                        buf.push_str((line + "\r\n").as_str())
+                    }
+                    Some(buf)
+                } else {
+                    None
+                })
+        ))
     }
 
     fn return_statement(input: Node) -> Result<String> {
@@ -527,6 +543,9 @@ impl Parser {
     /// Iterate over each statement in a function, run/evauluate the code.
     fn function_body(input: Node) -> Result<Vec<String>> {
         let mut result = Vec::new();
+
+        let mut appendices = Vec::new();
+
         for statement in input.children() {
             for part in statement.children() {
                 let rule = part.as_rule();
@@ -541,11 +560,23 @@ impl Parser {
                         return Ok(result)
                     }
                     Rule::if_statement => {
-                        result.push(Self::if_statement(part)? + "\r\n")
+                        let if_statement = Self::if_statement(part)?;
+
+                        appendices.push(if_statement.1.0);
+
+                        if let Some(else_block) = if_statement.1.1 {
+                            appendices.push(else_block);
+                        }
+
+                        result.push(if_statement.0 + "\r\n")
                     }
                     _ => panic!("not implemented: {:?}", rule),
                 }
             }
+        }
+
+        for appendice in appendices {
+            result.push(appendice);
         }
 
         return Ok(result);
@@ -561,7 +592,7 @@ impl Parser {
 
         let args = children.next().unwrap();
 
-        push_frame(&("func::".to_owned() + ident + args.as_str()));
+        push_frame(format!("func::{ident}").as_str());
         result.push_str(format!("\r\n~{ident}\r\n").as_str());
 
         let mut c: usize = 0;

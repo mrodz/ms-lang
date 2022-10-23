@@ -61,9 +61,7 @@ b_true = _{ "true" }
 b_false = _{ "false" }
 boolean = { (b_true | b_false) }
 
-block = { "{" ~ statement* ~ "}" }
-
-if_statement = { "if" ~ (function_call | boolean | ident) ~ block ~ ("else" ~ (if_statement | block))? }
+if_statement = { "if" ~ (function_call | boolean | ident) ~ "{" ~ function_body ~ "}" ~ ("else" ~ (if_statement | ("{" ~ function_body ~ "}")))? }
 // END If statement
 
 // START Math

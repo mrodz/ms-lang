@@ -1,6 +1,20 @@
 func main() {
-  var b = not(not(neq([1/3, 2], [1/3, 2])));
-  print(b);
+  var a = factorial(30);
+  print(a);
+}
+
+func factorial(number) {
+  return factorial_i(1, number);
+}
+
+func factorial_i(result, number) {
+  result *= number;
+  number -= 1;
+  if equ(number, 0) {
+    return result;
+  } else {
+    return factorial_i(result, number);
+  }
 }
 
 func equ(a, b) {
@@ -9,23 +23,7 @@ func equ(a, b) {
   return result;
 }
 
-func not(a) {
-  native "NOT $a";
-  return a;
-}
-
-func neq(a, b) {
-  var result = false;
-  native "NEQ $result, $a, $b";
-  return result;
-}
-
-func and(a, b) {
-  native "AND $a, $b";
-  return a;
-}
-
-func print(v) {
-  native "LOAD $v";
+func print(a) {
+  native "LOAD $a";
   native "SYSCALLRM PrintLn";
 }

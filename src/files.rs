@@ -856,7 +856,7 @@ mod commands {
         _function_context: &FunctionContext,
         functions: &GlobalFunctions,
     ) -> CommandRet {
-        if ctx.arguments.len() != 3 {
+        if !(ctx.arguments.len() == 3 || ctx.arguments.len() == 2) {
             return Err(MountError::new(
                 format!(
                     "Invalid 'IF' on line {}\r\n\tSyntax --\r\n\tIF $BoolVarName, FunctionName1, FunctionName2",
@@ -869,15 +869,16 @@ mod commands {
 
         if let Variable::Boolean(as_bool) = predicate {
             let _ = if *as_bool {
+                dbg!("true");
                 execute_function(
                     ctx.arguments.get(1).unwrap(),
                     functions,
                     variables,
                     loaded_variables,
                 )?
-            } else {
+            } else if let Some(name) = ctx.arguments.get(2) {
                 execute_function(
-                    ctx.arguments.get(2).unwrap(),
+                    name,
                     functions,
                     variables,
                     loaded_variables,
@@ -1248,6 +1249,8 @@ pub fn execute_function(
             //     ));
             // }
         }
+    } else {
+        panic!("{name} is not mapped.");
     }
 
     Ok(())
