@@ -317,12 +317,34 @@ impl Parser {
                 unsafe { VAL_INIT_REF = new_name };
                 res
             }
+            Rule::is_statement => {
+                let init = Self::is_statement(input)?;
+                format!("MOV {new_name}, {}\r\n", unsafe { &VAL_INIT_REF })
+            }
             // Rule::boolean_group => eval_boolean(input.as_str(), &new_name)?,
             // Rule::inline_boolean | Rule::boolean_prefix => eval_boolean(&("(".to_owned() + input.as_str() + ")"), &new_name)?,
             _ => panic!("undefined rule: {:?}", rule),
         });
 
         ret
+    }
+
+    fn is_statement(input: Node) -> Result<String> {
+        todo!("Fix & Implement for arrays too");
+        let mut children = input.children();
+
+        let mut result = vec![];
+
+        let first = children.next().unwrap();
+
+        result.push(format!("MOV $__FIRST_CMP__, {}", unsafe { &VAL_INIT_REF }));
+        
+        let second = children.next().unwrap();
+        dbg!(second);
+
+        result.push(format!("MOV $__SECOND_CMP__, {}", unsafe { &VAL_INIT_REF }));
+
+        todo!()
     }
 
     /// # Variable declaration
@@ -487,6 +509,21 @@ impl Parser {
         ))
     }
 
+    fn if_statement(input: Node) -> Result<String> {
+        todo!();
+        let mut children = input.children();
+
+        let condition = children.next().unwrap();
+
+        let condition_init = Self::val(condition)?;
+
+        let if_true = children.next().unwrap();
+
+        dbg!(if_true);
+
+        todo!()
+    }
+
     fn return_statement(input: Node) -> Result<String> {
         let val = input.children().next().unwrap();
 
@@ -519,6 +556,9 @@ impl Parser {
                     Rule::return_statement => {
                         result.push(Self::return_statement(part)? + "\r\n");
                         return Ok(result)
+                    }
+                    Rule::if_statement => {
+                        result.push(Self::if_statement(part)? + "\r\n")
                     }
                     _ => panic!("not implemented: {:?}", rule),
                 }

@@ -755,9 +755,10 @@ mod commands {
                     }
                 } else {
                     Err(MountError::new(format!(
-                        "Invalid '{}' on line {}\r\n\tSyntax --\r\n\tAND $VarName1, $VarName2",
+                        "Invalid '{}' on line {}\r\n\tSyntax --\r\n\t{} $VarName1, $VarName2",
                         stringify!($name),
-                        ctx.number
+                        ctx.number,
+                        stringify!($name)
                     )))
                 }
             }

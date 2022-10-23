@@ -1,10 +1,9 @@
 func main() {
-  var b = fizz();
-
-  native "LOAD $b";
-  native "SYSCALLRM PrintLn";
+  var a = 5 is 5;
+  print(a);
 }
 
-func fizz() {
-  return true;
+func print(v) {
+  native "LOAD $v";
+  native "SYSCALLRM PrintLn";
 }

@@ -8,7 +8,7 @@ underscore = { "_" }
 WHITESPACE = _{ " " | NEWLINE }
 COMMENT = _{ "//" }
 
-keywords = _{ "native" | "func" | "var" | "return" | "true" | "false" | "if" | "else" }
+keywords = _{ "is" | "native" | "func" | "var" | "return" | "true" | "false" | "if" | "else" }
 // END Constants
 
 // This is a any valid identity.
@@ -57,13 +57,16 @@ statement = {
 }
 
 // START If statement
-b_true = { "true" }
-b_false = { "false" }
-boolean = { b_true | b_false }
+b_true = _{ "true" }
+b_false = _{ "false" }
+boolean = { (b_true | b_false) }
+
+is_statement_val = _{ function_call | number | boolean | ident | string_literal_double | string_literal_single }
+is_statement = { is_statement_val ~ "is" ~ is_statement_val }
 
 block = { "{" ~ statement* ~ "}" }
 
-if_statement = { "if" ~ (ident | boolean | function_call) ~ block ~ ("else" ~ (if_statement | block))? }
+if_statement = { "if" ~ (function_call | boolean | ident) ~ block ~ ("else" ~ (if_statement | block))? }
 // END If statement
 
 // START Math
@@ -86,7 +89,7 @@ array_index_num = { ASCII_DIGIT{1,} }
 array_index = { ident ~ index+ }
 index = { "[" ~ (array_index_num | val) ~ "]" }
 
-val = { ((array_index) | array) | function_call | (inline_math) | (primary) | (string_literal_double | string_literal_single) | boolean | ident }
+val = { ((array_index) | array) | is_statement | function_call | (inline_math) | (primary) | (string_literal_double | string_literal_single) | boolean | ident }
 
 variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
 variable_reassign = { ident ~ "=" ~ val ~ ";" }
