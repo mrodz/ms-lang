@@ -40,6 +40,43 @@ pub enum Variable {
     Dim(Vec<Variable>),
 }
 
+impl PartialEq for Variable {
+    fn eq(&self, other: &Self) -> bool {
+        if let (Variable::Number(n1), Variable::Number(n2)) = (self, other) {
+            return *n1 == *n2
+        }
+  
+        if let (Variable::Boolean(n1), Variable::Boolean(n2)) = (self, other) {
+            return *n1 == *n2;
+        }
+  
+        if let (Variable::String(n1), Variable::String(n2)) = (self, other) {
+            return n1.to_string() == n2.to_string();
+        }
+  
+        if let (Variable::Dim(n1), Variable::Dim(n2)) = (self, other) {
+            if n1.len() != n2.len() {
+                return false;
+            }
+  
+            for i in 0..n1.len() {
+                let res: bool = n1.get(i).unwrap() == n2.get(i).unwrap();
+                if !res {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        false
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        !(self == other)
+    }
+}
+
 impl Variable {
     fn to_string(&self, append_type: bool) -> String {
         match self {
@@ -916,23 +953,7 @@ mod commands {
         let var1 = var_exists(ctx.arguments.get(1).unwrap(), variables)?;
         let var2 = var_exists(ctx.arguments.get(2).unwrap(), variables)?;
 
-        if let (Variable::Number(n1), Variable::Number(n2)) = (var1, var2) {
-          let res: bool = *n1 $op *n2;
-            variables.insert(dest_name.to_string(), Variable::Boolean(res));
-            return Ok(());
-        }
-
-        if let (Variable::Boolean(n1), Variable::Boolean(n2)) = (var1, var2) {
-          let res: bool = *n1 $op *n2;
-            variables.insert(dest_name.to_string(), Variable::Boolean(res));
-            return Ok(());
-        }
-
-        if let (Variable::String(n1), Variable::String(n2)) = (var1, var2) {
-            let res: bool = n1.to_string() $op n2.to_string();
-            variables.insert(dest_name.to_string(), Variable::Boolean(res));
-            return Ok(());
-        }
+        variables.insert(dest_name.to_string(), Variable::Boolean(var1 $op var2));
 
         Ok(())
     }

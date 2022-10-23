@@ -223,6 +223,7 @@ impl Parser {
             }
             Rule::function_call => {
                 let function_call = Self::function_call(input)?.to_string();
+                unsafe { VAL_INIT_REF = new_name.to_string() };
                 format!("{function_call}\r\nMOV {new_name}, $__RET__")
             }
             Rule::ident => {
@@ -317,34 +318,16 @@ impl Parser {
                 unsafe { VAL_INIT_REF = new_name };
                 res
             }
-            Rule::is_statement => {
-                let init = Self::is_statement(input)?;
-                format!("MOV {new_name}, {}\r\n", unsafe { &VAL_INIT_REF })
-            }
+            // Rule::is_statement => {
+            //     let init = Self::is_statement(input)?;
+            //     format!("MOV {new_name}, {}\r\n", unsafe { &VAL_INIT_REF })
+            // }
             // Rule::boolean_group => eval_boolean(input.as_str(), &new_name)?,
             // Rule::inline_boolean | Rule::boolean_prefix => eval_boolean(&("(".to_owned() + input.as_str() + ")"), &new_name)?,
             _ => panic!("undefined rule: {:?}", rule),
         });
 
         ret
-    }
-
-    fn is_statement(input: Node) -> Result<String> {
-        todo!("Fix & Implement for arrays too");
-        let mut children = input.children();
-
-        let mut result = vec![];
-
-        let first = children.next().unwrap();
-
-        result.push(format!("MOV $__FIRST_CMP__, {}", unsafe { &VAL_INIT_REF }));
-        
-        let second = children.next().unwrap();
-        dbg!(second);
-
-        result.push(format!("MOV $__SECOND_CMP__, {}", unsafe { &VAL_INIT_REF }));
-
-        todo!()
     }
 
     /// # Variable declaration
@@ -458,7 +441,7 @@ impl Parser {
             let val = param.children().next().unwrap();
             let init = Self::val(val).unwrap();
             result.push_str(&(init.as_str().to_owned() + "\r\n"));
-            let init_dest = unsafe { &VAL_INIT_REF };
+            let init_dest = unsafe { &VAL_INIT_REF }.to_string();
             val_inits.push(init_dest);
         }
 
