@@ -476,23 +476,39 @@ impl Parser {
         ))
     }
 
-    fn if_statement(input: Node) -> Result<(String, (String, Option<String>))> {
-        dbg!(&top_frame!().name);
-        
+    fn if_statement(input: Node) -> Result<(String, Vec<Option<String>>)> {
         let mut children = input.children();
 
-        let condition = children.next().unwrap();
-
-        dbg!(&condition);
+        let _ = children.next();
 
         let condition_init = gen_val_init(input)?;
 
         let condition_init_dest = unsafe { &VAL_INIT_REF }.to_string();
 
+        let mut appendices: Vec<Option<String>> = vec![];
+
         let if_true = Self::function_body(children.next().unwrap())?;
         
-        let if_false = if let Some(else_block) = children.next() {
-            Some(Self::function_body(else_block)?)
+        let if_false: Option<String> = if let Some(else_block) = children.next() {
+            match else_block.as_rule() {
+                Rule::function_body => {
+                    let mut buf = String::new();
+
+                    let lines = Self::function_body(else_block)?;
+                    for line in lines {
+                        buf.push_str(&(line + "\r\n"));
+                    }
+
+                    Some(buf)
+                }
+                Rule::if_statement => {
+                    let mut result = Self::if_statement(else_block)?;
+                    appendices.append(&mut result.1);
+                    Some(result.0)
+                }
+                _ => unreachable!()
+            }
+
         } else {
             None
         };
@@ -501,25 +517,23 @@ impl Parser {
         let name1 = format!("{}::if#{}", top_frame!().name, seed);
         let name2 = format!("{}::else#{}", top_frame!().name, seed);
 
+        appendices.push({
+            let mut buf = format!("\r\n~{name1}\r\n");
+            for line in if_true {
+                buf.push_str((line + "\r\n").as_str())
+            }
+            Some(buf)
+        });
+
+        appendices.push(if let Some(ref else_code) = if_false {
+            Some(format!("\r\n~{}\r\n{else_code}", &name2))
+        } else {
+            None
+        });
+
         Ok((
             format!("{condition_init}\r\nIF {condition_init_dest}, {name1}, {}", if if_false.is_some() {name2.to_string()} else {"".to_string()}),
-            (
-                format!("\r\n~{name1}\r\n{}\r\n", {
-                    let mut buf = String::new();
-                    for line in if_true {
-                        buf.push_str((line + "\r\n").as_str())
-                    }
-                    buf
-                }),
-                if let Some(else_code) = if_false {
-                    let mut buf = format!("\r\n~{}\r\n", &name2);
-                    for line in else_code {
-                        buf.push_str((line + "\r\n").as_str())
-                    }
-                    Some(buf)
-                } else {
-                    None
-                })
+            appendices    
         ))
     }
 
@@ -528,14 +542,6 @@ impl Parser {
 
         let val_init = Self::val(val)?;
 
-        // unsafe {
-        //     dbg!(&VAL_INIT_REF);
-        // }
-
-        // unsafe {
-        //     CALL_STACK.get_mut(CALL_STACK.len() - 1).unwrap().popped = true;
-        // }
-        
         Ok(format!("{val_init}\r\nMOV $__RET__, {}", unsafe { &VAL_INIT_REF }))
     }
 
@@ -560,15 +566,19 @@ impl Parser {
                         return Ok(result)
                     }
                     Rule::if_statement => {
-                        let if_statement = Self::if_statement(part)?;
+                        let mut if_statement = Self::if_statement(part)?;
 
-                        appendices.push(if_statement.1.0);
+                        dbg![&if_statement];
 
-                        if let Some(else_block) = if_statement.1.1 {
-                            appendices.push(else_block);
-                        }
+                        // appendices.push(if_statement.1.0);
 
-                        result.push(if_statement.0 + "\r\n")
+                        // if let Some(else_block) = if_statement.1.1 {
+                        //     appendices.push(else_block);
+                        // }
+
+                        result.push(if_statement.0 + "\r\n");
+
+                        appendices.append(&mut if_statement.1);
                     }
                     _ => panic!("not implemented: {:?}", rule),
                 }
@@ -576,7 +586,9 @@ impl Parser {
         }
 
         for appendice in appendices {
-            result.push(appendice);
+            if let Some(appendice) = appendice {
+                result.push(appendice);
+            }
         }
 
         return Ok(result);

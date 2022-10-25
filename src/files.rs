@@ -869,7 +869,6 @@ mod commands {
 
         if let Variable::Boolean(as_bool) = predicate {
             let _ = if *as_bool {
-                dbg!("true");
                 execute_function(
                     ctx.arguments.get(1).unwrap(),
                     functions,
