@@ -487,10 +487,17 @@ impl Parser {
 
         let mut appendices: Vec<Option<String>> = vec![];
 
+        let seed = gen_seed!();
+        let name1 = format!("{}::<if#{}>", top_frame!().name, seed);
+        let name2 = format!("{}::<else#{}>", top_frame!().name, seed);
+
+        push_frame(&name1);
         let if_true = Self::function_body(children.next().unwrap())?;
-        
+        pop_frame();
+
         let if_false: Option<String> = if let Some(else_block) = children.next() {
-            match else_block.as_rule() {
+            push_frame(&name2);
+            let r = match else_block.as_rule() {
                 Rule::function_body => {
                     let mut buf = String::new();
 
@@ -507,15 +514,12 @@ impl Parser {
                     Some(result.0)
                 }
                 _ => unreachable!()
-            }
-
+            };
+            pop_frame();
+            r
         } else {
             None
         };
-
-        let seed = gen_seed!();
-        let name1 = format!("{}::if#{}", top_frame!().name, seed);
-        let name2 = format!("{}::else#{}", top_frame!().name, seed);
 
         appendices.push({
             let mut buf = format!("\r\n~{name1}\r\n");
@@ -567,14 +571,6 @@ impl Parser {
                     }
                     Rule::if_statement => {
                         let mut if_statement = Self::if_statement(part)?;
-
-                        dbg![&if_statement];
-
-                        // appendices.push(if_statement.1.0);
-
-                        // if let Some(else_block) = if_statement.1.1 {
-                        //     appendices.push(else_block);
-                        // }
 
                         result.push(if_statement.0 + "\r\n");
 

@@ -1,19 +1,42 @@
+var number = 5;
+
 func main() {
-  if false {
-  } else if false {
-    print(2);
-  } else {
-    print("a");
-    if false {
-      print("b");
-    } else if true {
-      print("c");
+  var result = factorial(number);
+
+  print(result);
+
+  if true {
+    if true {
+      var bbb = true;
+      print(bbb);
     }
-    print("d");
+  }
+
+  
+}
+
+func print(b) {
+  native "LOAD $b";
+  native "SYSCALLRM PrintLn";
+}
+
+func factorial(a) {
+  return factorial_init(1, a);
+}
+
+func factorial_init(result, limit) {
+  result *= limit;
+  limit -= 1;
+
+  if cmp(limit, 0) {
+    return result;
+  } else {
+    return factorial_init(result, limit);
   }
 }
 
-func print(a) {
-  native "LOAD $a";
-  native "SYSCALLRM PrintLn";
+func cmp(a, b) {
+  var result = false;
+  native "EQU $result, $a, $b";
+  return result;
 }
