@@ -38,6 +38,13 @@ pub enum Variable {
     String(String),
     Boolean(bool),
     Dim(Vec<Variable>),
+    Object(Object)
+}
+
+#[derive(Debug, Clone)]
+pub struct Object {
+    variables: Vec<String>,
+    members: Vec<String>
 }
 
 impl PartialEq for Variable {
@@ -109,6 +116,9 @@ impl Variable {
                     + "]";
 
                 actual
+            }
+            Self::Object(o) => {
+                format!("<code object at {:p}>", &o)
             }
         }
     }
@@ -186,6 +196,7 @@ lazy_static! {
         insert_command!(NEGATE, negate);
         insert_command!(ARG, arg);
         insert_command!(AT, at);
+        insert_command!(NEWOBJ, create_object);
 
         command_map
     };
@@ -270,6 +281,50 @@ mod commands {
         } else {
             None
         }
+    }
+
+    pub fn create_object(
+        ctx: &Line,
+        variables: &mut VarMapping,
+        _loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions
+    ) -> CommandRet {
+        if ctx.arguments.len() == 0 {
+            return Err(MountError::new(format!(
+                "Invalid 'NEWOBJ' on line {}\r\n\tSyntax --\r\n\tNEWOBJ $ObjName, $Vars..., Functions",
+                ctx.number
+            )));
+        }
+
+        let name = &ctx.arguments[0];
+
+        let mut funcs = vec![];
+        let mut vars = vec![];
+
+        if !name.starts_with("$") {
+            return Err(MountError::new(format!(
+            "Invalid 'NEWOBJ' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
+            ctx.number, name
+          )));
+        }
+
+        for item in &ctx.arguments[1..ctx.arguments.len()] {
+            if item.starts_with('$') {
+                vars.push(item.to_string())
+            } else {
+                funcs.push(item.to_string())
+            }
+        }
+
+        let result = Variable::Object(super::Object {
+            members: funcs,
+            variables: vars
+        });
+
+        variables.insert(name.to_string(), result);
+
+        Ok(())
     }
 
     pub fn at(
@@ -953,7 +1008,9 @@ mod commands {
         let var1 = var_exists(ctx.arguments.get(1).unwrap(), variables)?;
         let var2 = var_exists(ctx.arguments.get(2).unwrap(), variables)?;
 
-        variables.insert(dest_name.to_string(), Variable::Boolean(var1 $op var2));
+        let result = var1 $op var2;
+
+        variables.insert(dest_name.to_string(), Variable::Boolean(result));
 
         Ok(())
     }
@@ -1262,12 +1319,12 @@ pub fn traverse_lines(
     variable_mapping: &mut HashMap<String, Variable>,
     loaded_variables: &mut Vec<Variable>,
 ) -> Result<(), MountError> {
-    if !lines.contains_key("main") {
+    if !lines.contains_key("__GLOBALS__->func::main") {
         return Err(MountError::new("No main function found.".into()));
     }
 
     let _ = execute_function(
-        &"main".to_string(),
+        &"__GLOBALS__->func::main".to_string(),
         functions,
         variable_mapping,
         loaded_variables,

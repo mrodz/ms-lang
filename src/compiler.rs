@@ -20,6 +20,7 @@ struct Parser;
 struct StackFrame {
     name: String,
     variables: HashMap<String, String>,
+    functions: HashMap<String, String>,
     depth: usize,
     // popped: bool
 }
@@ -29,6 +30,7 @@ impl StackFrame {
         Self {
             name: name.to_string(),
             variables: HashMap::new(),
+            functions: HashMap::new(),
             depth: inherit_from,
         }
     }
@@ -38,16 +40,33 @@ impl StackFrame {
         self.variables.insert(scope_name, compiled_name);
     }
 
+    pub fn add_fn(&mut self, scope_name: String, compiled_name: String) {
+        self.functions.insert(scope_name, compiled_name);
+    }
+
     /// # Get the compiled name of a variable.
     /// This variable must be in scope, and the function will
     /// return the first instance it encounters. The most
     /// specific variable will take presedence.
-    pub fn find_compiled_name(
-        &self,
-        scope_name: &String,
-    ) -> Option<String> {
+    pub fn find_compiled_name(&self, scope_name: &String) -> Option<String> {
         for i in (0..=self.depth).rev() {
-            match unsafe { CALL_STACK.get(i) }.unwrap().variables.get(scope_name) {
+            match unsafe { CALL_STACK.get(i) }
+                .unwrap()
+                .variables
+                .get(scope_name)
+            {
+                Some(name) => return Some(name.to_string()),
+                None => continue,
+            }
+        }
+
+        None
+    }
+
+    pub fn find_compiled_function(&self, scope_name: &String) -> Option<String> {
+        for i in (0..=self.depth).rev() {
+            let functions = &unsafe { CALL_STACK.get(i) }.unwrap().functions;
+            match functions.get(scope_name) {
                 Some(name) => return Some(name.to_string()),
                 None => continue,
             }
@@ -59,24 +78,22 @@ impl StackFrame {
 
 lazy_static! {
     static ref FUNCTION_MAPPING: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
-    static ref GLOBAL_VARS: Mutex<Vec<String>> = Mutex::new(Vec::new());
-    static ref LINE_NUMBER: Mutex<u32> = Mutex::new(0);
 }
 
 static mut VAL_INIT_REF: String = String::new();
 static mut CALL_STACK: Vec<StackFrame> = vec![];
+static mut GLOBAL_VARS: Vec<String> = vec![];
+// static mut LINE_NUMBER:
 
 macro_rules! top_frame {
     () => {
         unsafe { CALL_STACK.get_mut(CALL_STACK.len() - 1) }.unwrap()
-    }
+    };
 }
 
 /// # Add a new stack frame, given a name.
 fn push_frame(name: &str) {
-    unsafe {
-        CALL_STACK.push(StackFrame::new(name, CALL_STACK.len()))
-    }
+    unsafe { CALL_STACK.push(StackFrame::new(name, CALL_STACK.len())) }
 }
 
 /// # Pop the top stack frame.
@@ -97,6 +114,11 @@ fn add_var_to_scope(name: String, compiled_name: String) {
     top.add_var(name, compiled_name);
 }
 
+fn add_fn_to_scope(name: String, compiled_name: String) {
+    let top = top_frame!();
+    top.add_fn(name, compiled_name);
+}
+
 /// # Get the compiled name of a variable.
 /// Will be `Some` is the variable is accessible from the current scope,
 /// otherwise will be `None`.
@@ -104,6 +126,17 @@ fn get_var_from_scope(name: &String) -> Option<String> {
     let top = top_frame!();
 
     let result = match top.find_compiled_name(name) {
+        Some(str) => Some(str.to_string()),
+        None => None,
+    };
+
+    result
+}
+
+fn get_fn_from_scope(name: &String) -> Option<String> {
+    let top = top_frame!();
+
+    let result = match top.find_compiled_function(name) {
         Some(str) => Some(str.to_string()),
         None => None,
     };
@@ -215,7 +248,8 @@ fn gen_val_init(input: Node) -> Result<String> {
             buf = buf
                 + format!(
                     "MOV {new_name}, {}\r\n",
-                    get_var_from_scope(&other.to_string()).expect(format!("{new_name} is not in scope.").as_str())
+                    get_var_from_scope(&other.to_string())
+                        .expect(format!("{new_name} is not in scope.").as_str())
                 )
                 .as_str();
 
@@ -430,7 +464,7 @@ impl Parser {
         }
 
         Ok(format!(
-            "{result}{}\r\nJMP {ident}",
+            "{result}{}\r\nJMP {}",
             if val_inits.len() > 0 {
                 let mut buf = String::from("\r\nLOAD ");
                 for val_init in val_inits {
@@ -439,7 +473,8 @@ impl Parser {
                 buf
             } else {
                 "".to_string()
-            }
+            },
+            get_fn_from_scope(&ident.to_string()).unwrap()
         ))
     }
 
@@ -513,7 +548,7 @@ impl Parser {
                     appendices.append(&mut result.1);
                     Some(result.0)
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             };
             pop_frame();
             r
@@ -536,8 +571,15 @@ impl Parser {
         });
 
         Ok((
-            format!("{condition_init}\r\nIF {condition_init_dest}, {name1}, {}", if if_false.is_some() {name2.to_string()} else {"".to_string()}),
-            appendices    
+            format!(
+                "{condition_init}\r\nIF {condition_init_dest}, {name1}, {}",
+                if if_false.is_some() {
+                    name2.to_string()
+                } else {
+                    "".to_string()
+                }
+            ),
+            appendices,
         ))
     }
 
@@ -546,7 +588,9 @@ impl Parser {
 
         let val_init = Self::val(val)?;
 
-        Ok(format!("{val_init}\r\nMOV $__RET__, {}", unsafe { &VAL_INIT_REF }))
+        Ok(format!("{val_init}\r\nMOV $__RET__, {}", unsafe {
+            &VAL_INIT_REF
+        }))
     }
 
     /// # Function Bodies
@@ -567,7 +611,7 @@ impl Parser {
                     Rule::shorthand_assign => result.push(Self::shorthand_assign(part)? + "\r\n"),
                     Rule::return_statement => {
                         result.push(Self::return_statement(part)? + "\r\n");
-                        return Ok(result)
+                        return Ok(result);
                     }
                     Rule::if_statement => {
                         let mut if_statement = Self::if_statement(part)?;
@@ -600,8 +644,9 @@ impl Parser {
 
         let args = children.next().unwrap();
 
-        push_frame(format!("func::{ident}").as_str());
-        result.push_str(format!("\r\n~{ident}\r\n").as_str());
+        let fn_ident = format!("func::{ident}");
+        result.push_str(format!("\r\n~{}->{fn_ident}\r\n", top_frame!().name).as_str());
+        push_frame(fn_ident.as_str());
 
         let mut c: usize = 0;
         for arg in args.children() {
@@ -617,9 +662,9 @@ impl Parser {
             c += 1;
         }
 
-        let mut fn_map = FUNCTION_MAPPING.lock().unwrap();
-
-        fn_map.insert(ident.to_string(), c + 1);
+        let mut lock = FUNCTION_MAPPING.lock().unwrap();
+        lock.insert(ident.to_string(), c + 1);
+        drop(lock);
 
         result.push_str("POPALL\r\n");
 
@@ -642,6 +687,52 @@ impl Parser {
         Ok(result + "\r\n")
     }
 
+    fn object(input: Node) -> Result<String> {
+        let mut result = String::new();
+
+        let mut children = input.children();
+        let ident = children.next().unwrap().as_str();
+
+        let args = children.next().unwrap();
+
+        // push_frame(format!("func::{ident}").as_str());
+        // result.push_str(format!("\r\n~{ident}\r\n").as_str());
+        result.push_str(format!("\r\n~{}->obj::{ident}\r\n", top_frame!().name).as_str());
+        push_frame(format!("obj::{ident}").as_str());
+
+        let mut c: usize = 0;
+        for arg in args.children() {
+            let seed = gen_seed!();
+
+            let new_name = format!("${}_{seed}", arg.as_str());
+
+            result.push_str(format!("ARG {c}, {}\r\n", &new_name).as_str());
+
+            let interpreted = arg.as_str().to_string();
+
+            add_var_to_scope(interpreted, new_name);
+            c += 1;
+        }
+
+        let mut lock = FUNCTION_MAPPING.lock().unwrap();
+        lock.insert(ident.to_string(), c + 1);
+        drop(lock);
+
+        result.push_str("POPALL\r\n");
+
+        let body = if let Some(body) = children.next() {
+            Self::declarations(body).unwrap()
+        } else {
+            String::new()
+        };
+
+        pop_frame();
+
+        result.push_str(body.as_str());
+
+        Ok(result + "\r\n")
+    }
+
     /// # Top-level program declarations.
     /// Currently supports: functions, variables.
     fn declarations(input: Node) -> Result<String> {
@@ -649,11 +740,9 @@ impl Parser {
 
         for decl in input.children() {
             match decl.as_rule() {
-                Rule::variable => GLOBAL_VARS
-                    .lock()
-                    .unwrap()
-                    .push(Self::variable(decl)?.to_owned()),
+                Rule::variable => unsafe { GLOBAL_VARS.push(Self::variable(decl)?.to_owned()) },
                 Rule::function => result.push_str(Self::function(decl)?.as_str()),
+                Rule::object => result.push_str(Self::object(decl)?.as_str()),
                 _ => unreachable!(),
             }
         }
@@ -668,22 +757,45 @@ impl Parser {
 
         push_frame("__GLOBALS__");
 
+        let cloned = input.children();
+
+        for declaration in cloned {
+            if let Rule::declarations = declaration.as_rule() {
+                let decl = declaration.children().next().unwrap();
+                let rule = decl.as_rule();
+                match rule {
+                    Rule::function | Rule::object => {
+                        let ident = decl.children().next().unwrap().as_str();
+                        let fn_ident = format!(
+                            "{}->{}::{ident}",
+                            top_frame!().name,
+                            match rule {
+                                Rule::function => "func",
+                                _ => "obj",
+                            }
+                        );
+
+                        add_fn_to_scope(ident.to_string(), fn_ident);
+                    }
+                    Rule::variable => (),
+                    _ => unreachable!(),
+                }
+            }
+        }
+
         for declaration in input.children() {
-            match declaration.as_rule() {
-                Rule::declarations => {
-                    if let Ok(declaration) = Self::declarations(declaration) {
-                        if declaration.len() != 0 {
-                            result.push(declaration)
-                        }
+            if let Rule::declarations = declaration.as_rule() {
+                if let Ok(declaration) = Self::declarations(declaration) {
+                    if declaration.len() != 0 {
+                        result.push(declaration)
                     }
                 }
-                _ => continue,
             }
         }
 
         result.push("~__GLOBALS__\r\nSET $__MATH_RESULT__, 0".into());
 
-        for var in GLOBAL_VARS.lock().unwrap().iter() {
+        for var in unsafe { &GLOBAL_VARS } {
             result.push(var.to_string())
         }
 

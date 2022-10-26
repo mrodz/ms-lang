@@ -96,12 +96,13 @@ div_assign = { "/=" }
 mul_assign = { "*=" }
 mod_assign = { "%=" }
 
-declarations = { variable | function }
+object = { "obj" ~ ident ~ "(" ~ function_arguments ~ ")" ~ "{" ~ declarations* ~ "}"}
+declarations = { variable | function | object }
 
 // tabs = _{ ("\t"*) }
 
 file = {
     SOI ~
-    (((declarations))*) ~
+    declarations* ~
     EOI
 }
