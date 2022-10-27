@@ -3,21 +3,7 @@ var number = 5;
 func main() {
   var result = factorial(number);
 
-  print(result);
-
-  if true {
-    if true {
-      var bbb = true;
-      print(bbb);
-    }
-  }
-
-  
-}
-
-func print(b) {
-  native "LOAD $b";
-  native "SYSCALLRM PrintLn";
+  print(result);  
 }
 
 func factorial(a) {
@@ -39,4 +25,9 @@ func cmp(a, b) {
   var result = false;
   native "EQU $result, $a, $b";
   return result;
+}
+
+func print(b) {
+  native "LOAD $b";
+  native "SYSCALLRM PrintLn";
 }

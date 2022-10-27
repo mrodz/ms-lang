@@ -47,6 +47,98 @@ pub struct Object {
     members: Vec<String>
 }
 
+mod math_constants {
+  use super::Variable;
+  
+  pub const NUMBER: u8  = 0b10000;
+  pub const STRING: u8  = 0b01000;
+  pub const BOOLEAN: u8 = 0b00100;
+  pub const DIM: u8     = 0b00010;
+  pub const OBJECT: u8  = 0b00001;
+
+  pub fn from_type(var: &Variable) -> u8 {
+    match var {
+      Variable::Number(_) => NUMBER,
+      Variable::String(_) => STRING,
+      Variable::Boolean(_) => BOOLEAN,
+      Variable::Dim(_) => DIM,
+      Variable::Object(_) => OBJECT
+    }
+  }
+}
+
+ macro_rules! get {
+    ($var:ident as $type:tt) => {
+        if let Variable::$type(cast) = $var {
+          cast
+        } else {
+          panic!("{} {} {:?}", stringify!($var), stringify!($type), $var)
+        }
+    }
+}
+
+impl std::ops::Add for Variable {
+  type Output = Option<Self>;
+  fn add(self, other: Self) -> Self::Output {
+    let type1 = math_constants::from_type(&self);
+    let type2 = math_constants::from_type(&other);
+    let joint = type1 | type2;
+    
+    use math_constants::*;
+
+    println!("{:#b}, {:#b}, {:#b}", type1, type2, joint & NUMBER);
+    
+    let result: Self::Output = {
+      if type1 & type2 & NUMBER == NUMBER {
+        let n1: f32 = get!(self as Number);
+        let n2: f32 = get!(other as Number);
+        Some(Variable::Number(n1 + n2))
+      } else if joint & (NUMBER | STRING) == (NUMBER | STRING) {
+        let s1 = self.to_string(false);
+        let s2 = other.to_string(false);
+        Some(Variable::String(s1 + s2.as_str()))
+      } else if type1 & type2 & BOOLEAN == BOOLEAN {
+        let b1 = if get!(self as Boolean) { 1 } else { 0 };
+        let b2 = if get!(other as Boolean) { 1 } else { 0 };
+        Some(Variable::Number((b1 + b2) as f32))
+      } else {
+        None
+      }
+    };
+
+    result
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn add_numbers() {
+    let var1 = Variable::Number(5f32);
+    let var2 = Variable::Number(10f32);
+    
+    assert_eq!(var1 + var2, Variable::Number(15f32));
+  }
+
+  #[test]
+  fn add_str_num() {
+    let var1 = Variable::String(String::from("Hello"));
+    let var2 = Variable::Number(10f32);
+    
+    assert_eq!(var1 + var2, Variable::String(String::from("Hello10")));
+  }
+
+  #[test]
+  fn add_bools() {
+    let var1 = Variable::Boolean(true);
+    let var2 = Variable::Boolean(true);
+    
+    assert_eq!(var1 + var2, Variable::Number(2f32));
+  }
+}
+
 impl PartialEq for Variable {
     fn eq(&self, other: &Self) -> bool {
         if let (Variable::Number(n1), Variable::Number(n2)) = (self, other) {
