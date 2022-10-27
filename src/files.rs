@@ -6,6 +6,7 @@ use std::io::{BufReader, Read};
 use std::str::Lines;
 
 use self::command_types::{Command, GlobalFunctions};
+use self::math_constants::*;
 
 mod command_types {
     use super::{Line, MountError, Variable};
@@ -38,126 +39,237 @@ pub enum Variable {
     String(String),
     Boolean(bool),
     Dim(Vec<Variable>),
-    Object(Object)
+    Object(Object),
 }
 
 #[derive(Debug, Clone)]
 pub struct Object {
     variables: Vec<String>,
-    members: Vec<String>
+    members: Vec<String>,
 }
 
 mod math_constants {
-  use super::Variable;
-  
-  pub const NUMBER: u8  = 0b10000;
-  pub const STRING: u8  = 0b01000;
-  pub const BOOLEAN: u8 = 0b00100;
-  pub const DIM: u8     = 0b00010;
-  pub const OBJECT: u8  = 0b00001;
+    use super::Variable;
 
-  pub fn from_type(var: &Variable) -> u8 {
-    match var {
-      Variable::Number(_) => NUMBER,
-      Variable::String(_) => STRING,
-      Variable::Boolean(_) => BOOLEAN,
-      Variable::Dim(_) => DIM,
-      Variable::Object(_) => OBJECT
+    pub const NUMBER: u8 = 0b10000;
+    pub const STRING: u8 = 0b01000;
+    pub const BOOLEAN: u8 = 0b00100;
+    pub const DIM: u8 = 0b00010;
+    pub const OBJECT: u8 = 0b00001;
+
+    pub fn from_type(var: &Variable) -> u8 {
+        match var {
+            Variable::Number(_) => NUMBER,
+            Variable::String(_) => STRING,
+            Variable::Boolean(_) => BOOLEAN,
+            Variable::Dim(_) => DIM,
+            Variable::Object(_) => OBJECT,
+        }
     }
-  }
 }
 
- macro_rules! get {
+macro_rules! dim {
+    ($($x:expr),+ $(,)?) => {{
+        let mut vec: Vec<Variable> = vec![];
+
+        $(
+            vec.push(var_from_str(stringify!($x).to_string()));
+        )*
+
+        vec
+    }};
+}
+
+macro_rules! get {
     ($var:ident as $type:tt) => {
         if let Variable::$type(cast) = $var {
-          cast
+            cast
         } else {
-          panic!("{} {} {:?}", stringify!($var), stringify!($type), $var)
+            panic!("{} {} {:?}", stringify!($var), stringify!($type), $var)
+        }
+    };
+}
+
+impl std::ops::Sub for Variable {
+    type Output = Option<Self>;
+    fn sub(self, rhs: Self) -> Self::Output {
+        let type1 = math_constants::from_type(&self);
+        let type2 = math_constants::from_type(&rhs);
+
+        if type1 & type2 & NUMBER == NUMBER {
+            let n1 = get!(self as Number);
+            let n2 = get!(rhs as Number);
+            Some(Variable::Number(n1 - n2))
+        } else if type1 & type2 & BOOLEAN == BOOLEAN {
+            let n1 = if get!(self as Boolean) { 1u8 } else { 0u8 };
+            let n2 = if get!(rhs as Boolean) { 1u8 } else { 0u8 };
+            Some(Variable::Number((n1 - n2) as f32))
+        } else {
+            None
+        }
+    }
+}
+
+impl std::ops::Mul for Variable {
+    type Output = Option<Self>;
+    fn mul(self, rhs: Self) -> Self::Output {
+        let type1 = math_constants::from_type(&self);
+        let type2 = math_constants::from_type(&rhs);
+
+        if type1 & type2 & NUMBER == NUMBER {
+            let n1 = get!(self as Number);
+            let n2 = get!(rhs as Number);
+            Some(Variable::Number(n1 * n2))
+        } else if type1 & NUMBER == NUMBER && type2 & STRING == STRING {
+            let n1 = get!(self as Number);
+            let s2 = get!(rhs as String);
+
+            Some(Variable::String(s2.repeat(n1 as usize)))
+        } else if type1 & STRING == STRING && type2 & NUMBER == NUMBER {
+            let s1 = get!(self as String);
+            let n2 = get!(rhs as Number);
+
+            Some(Variable::String(s1.repeat(n2 as usize)))
+        } else {
+            None
+        }
+    }
+}
+
+impl std::ops::Div for Variable {
+    type Output = Option<Self>;
+    fn div(self, rhs: Self) -> Self::Output {
+        let type1 = math_constants::from_type(&self);
+        let type2 = math_constants::from_type(&rhs);
+
+        if type1 & type2 & NUMBER == NUMBER {
+            let n1 = get!(self as Number);
+            let n2 = get!(rhs as Number);
+            Some(Variable::Number(n1 / n2))
+        } else {
+            None
+        }
+    }
+}
+
+impl std::ops::Rem for Variable {
+    type Output = Option<Self>;
+    fn rem(self, rhs: Self) -> Self::Output {
+        let type1 = math_constants::from_type(&self);
+        let type2 = math_constants::from_type(&rhs);
+
+        if type1 & type2 & NUMBER == NUMBER {
+            let n1 = get!(self as Number);
+            let n2 = get!(rhs as Number);
+            Some(Variable::Number(n1 % n2))
+        } else {
+            None
         }
     }
 }
 
 impl std::ops::Add for Variable {
-  type Output = Option<Self>;
-  fn add(self, other: Self) -> Self::Output {
-    let type1 = math_constants::from_type(&self);
-    let type2 = math_constants::from_type(&other);
-    let joint = type1 | type2;
-    
-    use math_constants::*;
+    type Output = Option<Self>;
+    fn add(self, rhs: Self) -> Self::Output {
+        let type1 = math_constants::from_type(&self);
+        let type2 = math_constants::from_type(&rhs);
 
-    println!("{:#b}, {:#b}, {:#b}", type1, type2, joint & NUMBER);
-    
-    let result: Self::Output = {
-      if type1 & type2 & NUMBER == NUMBER {
-        let n1: f32 = get!(self as Number);
-        let n2: f32 = get!(other as Number);
-        Some(Variable::Number(n1 + n2))
-      } else if joint & (NUMBER | STRING) == (NUMBER | STRING) {
-        let s1 = self.to_string(false);
-        let s2 = other.to_string(false);
-        Some(Variable::String(s1 + s2.as_str()))
-      } else if type1 & type2 & BOOLEAN == BOOLEAN {
-        let b1 = if get!(self as Boolean) { 1 } else { 0 };
-        let b2 = if get!(other as Boolean) { 1 } else { 0 };
-        Some(Variable::Number((b1 + b2) as f32))
-      } else {
-        None
-      }
-    };
+        use math_constants::*;
 
-    result
-  }
+        let result: Self::Output = {
+            if type1 & type2 & NUMBER == NUMBER {
+                let n1: f32 = get!(self as Number);
+                let n2: f32 = get!(rhs as Number);
+                Some(Variable::Number(n1 + n2))
+            } else if (type1 | type2) & (NUMBER | STRING) == (NUMBER | STRING) {
+                let s1 = self.to_string(false);
+                let s2 = rhs.to_string(false);
+                Some(Variable::String(s1 + s2.as_str()))
+            } else if type1 & type2 & BOOLEAN == BOOLEAN {
+                let b1 = if get!(self as Boolean) { 1u8 } else { 0u8 };
+                let b2 = if get!(rhs as Boolean) { 1u8 } else { 0u8 };
+                Some(Variable::Number((b1 + b2) as f32))
+            } else if type1 & type2 & DIM == DIM {
+                let mut d1 = get!(self as Dim);
+                let mut d2 = get!(rhs as Dim);
+                d1.append(&mut d2);
+                Some(Variable::Dim(d1))
+            } else {
+                None
+            }
+        };
+
+        result
+    }
 }
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+    use super::*;
 
-  #[test]
-  fn add_numbers() {
-    let var1 = Variable::Number(5f32);
-    let var2 = Variable::Number(10f32);
-    
-    assert_eq!(var1 + var2, Variable::Number(15f32));
-  }
+    #[test]
+    fn add_numbers() {
+        let var1 = Variable::Number(5f32);
+        let var2 = Variable::Number(10f32);
 
-  #[test]
-  fn add_str_num() {
-    let var1 = Variable::String(String::from("Hello"));
-    let var2 = Variable::Number(10f32);
-    
-    assert_eq!(var1 + var2, Variable::String(String::from("Hello10")));
-  }
+        assert_eq!(var1 + var2, Some(Variable::Number(15f32)));
+    }
 
-  #[test]
-  fn add_bools() {
-    let var1 = Variable::Boolean(true);
-    let var2 = Variable::Boolean(true);
-    
-    assert_eq!(var1 + var2, Variable::Number(2f32));
-  }
+    #[test]
+    fn add_str_num() {
+        let var1 = Variable::String(String::from("Hello"));
+        let var2 = Variable::Number(10f32);
+
+        assert_eq!(var1 + var2, Some(Variable::String(String::from("Hello10"))));
+    }
+
+    #[test]
+    fn add_bools() {
+        let var1 = Variable::Boolean(true);
+        let var2 = Variable::Boolean(true);
+
+        assert_eq!(var1 + var2, Some(Variable::Number(2f32)));
+    }
+
+    #[test]
+    fn add_dims() {
+        let dim1 = Variable::Dim(dim![1, "Hello World", 3]);
+        let dim2 = Variable::Dim(dim![true, false, 5000000, dim![3, 2, 1]]);
+
+        assert_eq!(
+            dim1 + dim2,
+            Some(Variable::Dim(dim![
+                1,
+                "Hello World",
+                3,
+                true,
+                false,
+                5000000,
+                dim![3, 2, 1]
+            ]))
+        )
+    }
 }
 
 impl PartialEq for Variable {
     fn eq(&self, other: &Self) -> bool {
         if let (Variable::Number(n1), Variable::Number(n2)) = (self, other) {
-            return *n1 == *n2
+            return *n1 == *n2;
         }
-  
+
         if let (Variable::Boolean(n1), Variable::Boolean(n2)) = (self, other) {
             return *n1 == *n2;
         }
-  
+
         if let (Variable::String(n1), Variable::String(n2)) = (self, other) {
             return n1.to_string() == n2.to_string();
         }
-  
+
         if let (Variable::Dim(n1), Variable::Dim(n2)) = (self, other) {
             if n1.len() != n2.len() {
                 return false;
             }
-  
+
             for i in 0..n1.len() {
                 let res: bool = n1.get(i).unwrap() == n2.get(i).unwrap();
                 if !res {
@@ -236,7 +348,7 @@ impl std::fmt::Display for MountError {
 }
 
 impl MountError {
-    fn new(message: String) -> Self {
+    const fn new(message: String) -> Self {
         Self { message: message }
     }
 }
@@ -330,6 +442,10 @@ pub fn run_program(path: &String) {
     }
 }
 
+const ILLEGAL_OP: fn(String, u32) -> MountError = |name, number| MountError::new(format!(
+    "Invalid '{}' on line {}\r\n\tIllegal operation.", name, number
+));
+
 pub fn var_from_str(string: String) -> Variable {
     if let Ok(number) = string.parse::<f32>() {
         return Variable::Number(number);
@@ -369,7 +485,7 @@ mod commands {
                 None
             }
         } else if let Ok(index) = str.parse::<usize>() {
-            return Some(index)
+            return Some(index);
         } else {
             None
         }
@@ -380,7 +496,7 @@ mod commands {
         variables: &mut VarMapping,
         _loaded_variables: &mut LoadedVars,
         _function_context: &FunctionContext,
-        _functions: &GlobalFunctions
+        _functions: &GlobalFunctions,
     ) -> CommandRet {
         if ctx.arguments.len() == 0 {
             return Err(MountError::new(format!(
@@ -396,9 +512,9 @@ mod commands {
 
         if !name.starts_with("$") {
             return Err(MountError::new(format!(
-            "Invalid 'NEWOBJ' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
-            ctx.number, name
-          )));
+                "Invalid 'NEWOBJ' on line {}\r\n\tVariable name must start with '$'\r\n\tFound {}",
+                ctx.number, name
+            )));
         }
 
         for item in &ctx.arguments[1..ctx.arguments.len()] {
@@ -411,7 +527,7 @@ mod commands {
 
         let result = Variable::Object(super::Object {
             members: funcs,
-            variables: vars
+            variables: vars,
         });
 
         variables.insert(name.to_string(), result);
@@ -449,7 +565,8 @@ mod commands {
                             None => {
                                 return Err(MountError::new(format!(
                                     "Index out of bounds on line {}: {index} >= len({})",
-                                    ctx.number, d.len()
+                                    ctx.number,
+                                    d.len()
                                 )))
                             }
                         }
@@ -457,8 +574,11 @@ mod commands {
                         Ok(())
                     } else {
                         Err(MountError::new(
-                            format!("Invalid data types on line {}: Expected <dim>, found {:?}", ctx.number, d)
-                                .to_string(),
+                            format!(
+                                "Invalid data types on line {}: Expected <dim>, found {:?}",
+                                ctx.number, d
+                            )
+                            .to_string(),
                         ))
                     }
                 } else {
@@ -469,8 +589,11 @@ mod commands {
                 }
             } else {
                 Err(MountError::new(
-                    format!("Invalid data types on line {}: Expected <int>, found {index}", ctx.number)
-                        .to_string(),
+                    format!(
+                        "Invalid data types on line {}: Expected <int>, found {index}",
+                        ctx.number
+                    )
+                    .to_string(),
                 ))
             }
         } else {
@@ -809,82 +932,80 @@ mod commands {
     }
 
     macro_rules! arithmetic {
-      ($name:ident,$op:tt) => {
-        pub fn $name(
-        	ctx: &Line,
-        	variables: &mut VarMapping,
-        	_loaded_variables: &mut LoadedVars,
-			_function_context: &FunctionContext,
-			_functions: &GlobalFunctions
-        ) -> CommandRet {
-			if ctx.arguments.len() != 2 {
-            	return Err(MountError::new(
-                	format!(
-                    	"Invalid '{}' on line {}\r\n\tSyntax --\r\n\tADD $VarName1, $VarName2",
-                    	stringify!($name),
-                    	ctx.number
-                	).to_string(),
-            	));
-        	}
+        ($name:ident,$op:tt) => {
+            pub fn $name(
+                ctx: &Line,
+                variables: &mut VarMapping,
+                _loaded_variables: &mut LoadedVars,
+                _function_context: &FunctionContext,
+                _functions: &GlobalFunctions,
+            ) -> CommandRet {
+                if ctx.arguments.len() != 2 {
+                    return Err(MountError::new(format!(
+                        "Invalid '{}' on line {}\r\n\tSyntax --\r\n\tADD $VarName1, $VarName2",
+                        stringify!($name),
+                        ctx.number
+                    )));
+                }
 
-        	if let [name1, name2] = ctx.arguments.as_slice() {
-            	let maybe1 = var_exists(&name1, variables);
-            	let maybe2 = var_exists(&name2, variables);
-            	let maybe2_is = maybe2.is_err();
+                if let [name1, name2] = ctx.arguments.as_slice() {
+                    let maybe1 = var_exists(&name1, variables)?;
+                    let maybe2 = var_exists(&name2, variables);
 
-            	if maybe1.is_ok() {
-                	let n1 = match maybe1.unwrap() {
-                    	super::Variable::Number(n1) => *n1,
-                    	_ => {
-                        	return Err(MountError::new(
-                            	format!("Invalid data types on line {}: Expected <int>", ctx.number)
-                                	.to_string(),
-                        	))
-                    	}
-                	};
-
-                	use std::str::FromStr;
-
-	                let n2 = if !maybe2_is {
-    	                match maybe2.unwrap() {
-        	                super::Variable::Number(n2) => *n2,
-            	            _ => {
-                	            return Err(MountError::new(
-                    	            format!(
-                        	            "Invalid data types on line {}: Expected <int>",
-                            	        ctx.number
-                                	).to_string(),
-                            	))
-                        	}
-                    	}
-                	} else if let Ok(number) = f32::from_str(name2) {
-                    	number
-                	} else {
-						return Err(MountError::new(
-                        	format!("Invalid data types on line {}: Expected <int>", ctx.number)
-                            .to_string(),
-                    	));
-                	};
-
-                	#[allow(mutable_borrow_reservation_conflict)]
-                	variables.insert(name1.to_string(), super::Variable::Number($op(n1, n2)));
-            	} else if maybe2_is {
-                	return Err(MountError::new(format!("Invalid '{}' on line {}\r\n\tAdding {} to {}, but at least one of these names are not in scope.", stringify!($name), ctx.number, name2, name2).to_string()));
-            	}
-        	}
-
-        	Ok(())
+                    if let Ok(var) = maybe2 {
+                        let var1 = variables.get(name1).unwrap();
+                        if let Some(Some(res)) = $op(var1.clone(), var.clone()) {
+                            
+                            variables.insert(name1.to_string(), res);
+                        } else {
+                            return Err(crate::files::ILLEGAL_OP(stringify!($name).to_string(), ctx.number));
+                        }
+                    } else {
+                        use std::str::FromStr;
+                        if let Ok(number) = f32::from_str(name2) {
+                            if let Some(Some(res)) = $op(maybe1.clone(), Variable::Number(number)) {
+                                variables.insert(name1.to_string(), res);
+                            } else {
+                                return Err(MountError::new(format!(
+                                    "Invalid '{}' on line {}\r\n\tIllegal operation.",
+                                    stringify!($name),
+                                    ctx.number
+                                )));
+                            }
+                        } else {
+                            return Err(MountError::new(
+                                format!(
+                                    "Invalid data types on line {}: Expected <int>",
+                                    ctx.number
+                                )
+                            ));
+                        }
+                    }
+                }
+                Ok(())
+            }
         }
-      }
     }
 
-    arithmetic!(add, (|n1, n2| n1 + n2));
-    arithmetic!(sub, (|n1, n2| n1 - n2));
-    arithmetic!(mult, (|n1, n2| n1 * n2));
-    arithmetic!(div, (|n1, n2| n1 / n2));
-    arithmetic!(pow, (|n1: f32, n2| n1.powf(n2)));
-    arithmetic!(r#mod, (|n1, n2| n1 % n2));
-    arithmetic!(sqrt, (|n1, n2| (n1 as f32).powf(1.0 / n2)));
+    arithmetic!(add, (|n1: Variable, n2: Variable| Some(n1 + n2)));
+    arithmetic!(sub, (|n1: Variable, n2: Variable| Some(n1 - n2)));
+    arithmetic!(mult, (|n1: Variable, n2: Variable| Some(n1 * n2)));
+    arithmetic!(div, (|n1: Variable, n2: Variable| Some(n1 / n2)));
+    arithmetic!(r#mod, (|n1: Variable, n2: Variable| Some(n1 % n2)));
+    arithmetic!(pow, (|n1: Variable, n2: Variable| {
+        if let (Variable::Number(n1), Variable::Number(n2)) = (n1, n2) {
+            Some(Some(Variable::Number(n1.powf(n2))))
+        } else {
+            None
+        }
+    }));
+    arithmetic!(sqrt, (|n1, n2| {
+        if let (Variable::Number(n1), Variable::Number(n2)) = (n1, n2) {
+            Some(Some(Variable::Number(n1.powf(1f32 / n2))))
+        } else {
+            None
+        }
+    }));
 
     pub fn drop(
         ctx: &Line,
@@ -1023,12 +1144,7 @@ mod commands {
                     loaded_variables,
                 )?
             } else if let Some(name) = ctx.arguments.get(2) {
-                execute_function(
-                    name,
-                    functions,
-                    variables,
-                    loaded_variables,
-                )?
+                execute_function(name, functions, variables, loaded_variables)?
             };
         } else {
             return Err(MountError::new(

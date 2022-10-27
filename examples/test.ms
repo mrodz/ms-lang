@@ -2,8 +2,7 @@ var number = 5;
 
 func main() {
   var result = factorial(number);
-
-  print(result);  
+  print(a);  
 }
 
 func factorial(a) {
