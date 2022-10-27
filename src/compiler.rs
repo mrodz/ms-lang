@@ -698,7 +698,7 @@ impl Parser {
         // push_frame(format!("func::{ident}").as_str());
         // result.push_str(format!("\r\n~{ident}\r\n").as_str());
         result.push_str(format!("\r\n~{}->obj::{ident}\r\n", top_frame!().name).as_str());
-        push_frame(format!("obj::{ident}").as_str());
+        push_frame(format!("{}->obj::{ident}", top_frame!().name).as_str());
 
         let mut c: usize = 0;
         for arg in args.children() {

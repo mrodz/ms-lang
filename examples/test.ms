@@ -1,18 +1,21 @@
-var number = 5;
-
 func main() {
-  var result = factorial(number);
-  print(a);  
+  var result = factorial(34);
+  print(result);
 }
 
-func factorial(a) {
-  return factorial_init(1, a);
+obj greeter(message) {
+  func greet() {
+    print(message);
+  }
+}
+
+func factorial(number) {
+  return factorial_init(1, number);
 }
 
 func factorial_init(result, limit) {
   result *= limit;
   limit -= 1;
-
   if cmp(limit, 0) {
     return result;
   } else {
@@ -20,13 +23,31 @@ func factorial_init(result, limit) {
   }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func print(a) {
+  native "LOAD $a";
+  native "SYSCALLRM PrintLn";
+}
+
 func cmp(a, b) {
   var result = false;
   native "EQU $result, $a, $b";
   return result;
-}
-
-func print(b) {
-  native "LOAD $b";
-  native "SYSCALLRM PrintLn";
 }
