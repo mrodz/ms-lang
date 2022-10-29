@@ -1,6 +1,6 @@
 use lazy_static::lazy_static;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::str::Lines;
@@ -44,8 +44,8 @@ pub enum Variable {
 
 #[derive(Debug, Clone)]
 pub struct Object {
-    variables: Vec<String>,
-    members: Vec<String>,
+    variables: HashSet<String>,
+    members: HashSet<String>,
 }
 
 mod math_constants {
@@ -322,7 +322,7 @@ impl Variable {
                 actual
             }
             Self::Object(o) => {
-                format!("<code object at {:p}>", &o)
+                format!("<code object at {:p}> :: \r\n{:#?}", &o, &o)
             }
         }
     }
@@ -401,6 +401,7 @@ lazy_static! {
         insert_command!(ARG, arg);
         insert_command!(AT, at);
         insert_command!(NEWOBJ, create_object);
+        insert_command!(REFOBJ, ref_on_object);
 
         command_map
     };
@@ -459,6 +460,8 @@ pub fn var_from_str(string: String) -> Variable {
 }
 
 mod commands {
+    use std::collections::HashSet;
+
     use super::built_in_functions;
     use super::command_types::*;
     use super::execute_function;
@@ -491,6 +494,44 @@ mod commands {
         }
     }
 
+    pub fn ref_on_object(
+        ctx: &Line,
+        variables: &mut VarMapping,
+        _loaded_variables: &mut LoadedVars,
+        _function_context: &FunctionContext,
+        _functions: &GlobalFunctions,
+    ) -> CommandRet {
+        if let (Some(obj_name), Some(field_or_method)) = (ctx.arguments.get(0), ctx.arguments.get(1)) {
+            if let Some(var) = variables.get(obj_name) {
+                if let Variable::Object(obj) = var {
+                    if !(obj.members.contains(field_or_method) | obj.variables.contains(field_or_method)) {
+                        Err(MountError::new(format!(
+                            "Invalid 'REFOBJ' on line {}\r\n\t{field_or_method} does not exist on {obj_name}",
+                            ctx.number
+                        )))
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(MountError::new(format!(
+                        "Invalid 'REFOBJ' on line {}\r\n\t{obj_name} is not an object",
+                        ctx.number
+                    )))
+                }
+            } else {
+                Err(MountError::new(format!(
+                    "Variable '{}' has not been declared, but it is referenced on line {}",
+                    obj_name, ctx.number
+                )))
+            }
+        } else {
+            Err(MountError::new(format!(
+                "Invalid 'REFOBJ' on line {}\r\n\tSyntax --\r\n\tREFOBJ $ObjName, $FieldName | MethodName",
+                ctx.number
+            )))
+        }
+    }
+
     pub fn create_object(
         ctx: &Line,
         variables: &mut VarMapping,
@@ -507,8 +548,8 @@ mod commands {
 
         let name = &ctx.arguments[0];
 
-        let mut funcs = vec![];
-        let mut vars = vec![];
+        let mut funcs = HashSet::new();
+        let mut vars = HashSet::new();
 
         if !name.starts_with("$") {
             return Err(MountError::new(format!(
@@ -519,9 +560,9 @@ mod commands {
 
         for item in &ctx.arguments[1..ctx.arguments.len()] {
             if item.starts_with('$') {
-                vars.push(item.to_string())
+                vars.insert(item.to_string());
             } else {
-                funcs.push(item.to_string())
+                funcs.insert(item.to_string());
             }
         }
 
@@ -1527,12 +1568,12 @@ pub fn traverse_lines(
     variable_mapping: &mut HashMap<String, Variable>,
     loaded_variables: &mut Vec<Variable>,
 ) -> Result<(), MountError> {
-    if !lines.contains_key("__GLOBALS__->func::main") {
+    if !lines.contains_key("__GLOBALS__->func(main)") {
         return Err(MountError::new("No main function found.".into()));
     }
 
     let _ = execute_function(
-        &"__GLOBALS__->func::main".to_string(),
+        &"__GLOBALS__->func(main)".to_string(),
         functions,
         variable_mapping,
         loaded_variables,

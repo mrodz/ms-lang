@@ -9,6 +9,8 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::sync::Mutex;
 
+use crate::files::Object;
+
 type Result<T> = std::result::Result<T, Error<Rule>>;
 type Node<'i> = pest_consume::Node<'i, Rule, ()>;
 
@@ -355,9 +357,7 @@ impl Parser {
         let name = parts.next().unwrap().as_str();
         let val = parts.next().unwrap();
 
-        let seed = gen_seed!();
-
-        let new_name = format!("${name}_{seed}");
+        let new_name = format!("${}->var({name})", top_frame!().name);
 
         let init = Self::val(val)?; // evaluate the
 
@@ -644,7 +644,7 @@ impl Parser {
 
         let args = children.next().unwrap();
 
-        let fn_ident = format!("func::{ident}");
+        let fn_ident = format!("func({ident})");
         result.push_str(format!("\r\n~{}->{fn_ident}\r\n", top_frame!().name).as_str());
         push_frame(fn_ident.as_str());
 
@@ -688,7 +688,7 @@ impl Parser {
     }
 
     fn object(input: Node) -> Result<String> {
-        let mut result = String::new();
+        let mut result: Vec<String> = vec![];
 
         let mut children = input.children();
         let ident = children.next().unwrap().as_str();
@@ -697,8 +697,8 @@ impl Parser {
 
         // push_frame(format!("func::{ident}").as_str());
         // result.push_str(format!("\r\n~{ident}\r\n").as_str());
-        result.push_str(format!("\r\n~{}->obj::{ident}\r\n", top_frame!().name).as_str());
-        push_frame(format!("{}->obj::{ident}", top_frame!().name).as_str());
+        result.push(format!("~{}->obj({ident})\r\n", top_frame!().name));
+        push_frame(format!("{}->obj({ident})", top_frame!().name).as_str());
 
         let mut c: usize = 0;
         for arg in args.children() {
@@ -706,7 +706,7 @@ impl Parser {
 
             let new_name = format!("${}_{seed}", arg.as_str());
 
-            result.push_str(format!("ARG {c}, {}\r\n", &new_name).as_str());
+            result.push(format!("ARG {c}, {}", &new_name));
 
             let interpreted = arg.as_str().to_string();
 
@@ -718,19 +718,83 @@ impl Parser {
         lock.insert(ident.to_string(), c + 1);
         drop(lock);
 
-        result.push_str("POPALL\r\n");
+        result.push("POPALL".to_owned());
 
-        let body = if let Some(body) = children.next() {
-            Self::declarations(body).unwrap()
-        } else {
-            String::new()
+        let mut variables = vec![];
+        let mut members = vec![];
+
+        let current_globals = unsafe { GLOBAL_VARS.to_owned() }.clone();
+
+        unsafe {
+            GLOBAL_VARS = vec![]
+        }
+
+        for child in children {
+            let rule = child.children().next().unwrap();
+            let ident = rule.children().next().unwrap();
+
+            match rule.as_rule() {
+                Rule::function | Rule::object => members.push(ident.as_str()),
+                Rule::variable => variables.push(ident.as_str()),
+                _ => {
+                    panic!("{:?}", ident.as_rule())
+                }
+            }
+
+            let body = Self::declarations(child).unwrap();
+
+
+
+            result.push(body);
+        }
+
+        let new_globals = unsafe {
+            let mut buf = String::new();
+            for decl in &GLOBAL_VARS {
+                buf.push_str(&(decl.to_owned() + "\r\n"));
+            }
+
+            let mut joint_list = String::new();
+
+            for variable in variables {
+                joint_list.push_str(format!("{}->var({variable}), ", top_frame!().name).as_str());
+            }
+
+            for member in members {
+                joint_list.push_str(format!("{}->func({member}), ", top_frame!().name).as_str());
+            }
+
+            format!("{buf}\r\nNEWOBJ $__RET__, {joint_list}\r\n")
         };
+
+
+        result.insert(1, new_globals);
+
+        // let finished = format!("\r\n{result}\r\n", unsafe {
+        //     let mut buf = String::new();
+        //     for decl in &GLOBAL_VARS {
+        //         buf.push_str(decl);
+        //     }
+        //     buf
+        // });
+
+        unsafe {
+            GLOBAL_VARS = current_globals
+        }
+
 
         pop_frame();
 
-        result.push_str(body.as_str());
 
-        Ok(result + "\r\n")
+        Ok({
+            let mut buf = String::new();
+
+            for line in &result {
+                buf.push_str(line);
+            }
+
+            buf
+        })
     }
 
     /// # Top-level program declarations.
@@ -740,7 +804,9 @@ impl Parser {
 
         for decl in input.children() {
             match decl.as_rule() {
-                Rule::variable => unsafe { GLOBAL_VARS.push(Self::variable(decl)?.to_owned()) },
+                Rule::variable => {
+                    unsafe { GLOBAL_VARS.push(Self::variable(decl)?.to_owned()) }
+                }
                 Rule::function => result.push_str(Self::function(decl)?.as_str()),
                 Rule::object => result.push_str(Self::object(decl)?.as_str()),
                 _ => unreachable!(),
@@ -767,7 +833,7 @@ impl Parser {
                     Rule::function | Rule::object => {
                         let ident = decl.children().next().unwrap().as_str();
                         let fn_ident = format!(
-                            "{}->{}::{ident}",
+                            "{}->{}({ident})",
                             top_frame!().name,
                             match rule {
                                 Rule::function => "func",

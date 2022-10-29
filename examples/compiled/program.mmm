@@ -1,5 +1,10 @@
-~main
-DIM $y, "a",true,"b",
-DIM $x, 10.1, 20, 30, $y, 50
-LOAD $x,
-SYSCALL Print
+~__GLOBALS__->obj(dog)->func(bark)
+ARG 0, $message
+POPALL
+LOAD $message
+SYSCALLRM PrintLn
+
+~__GLOBALS__->func(main)
+NEWOBJ $dog, __GLOBALS__->obj(dog)->func(bark)
+LOAD $dog
+SYSCALLRM Print

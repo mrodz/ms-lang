@@ -8,13 +8,14 @@ underscore = { "_" }
 WHITESPACE = _{ " " | NEWLINE }
 COMMENT = _{ "//" }
 
-keywords = _{ "is" | "native" | "func" | "var" | "return" | "true" | "false" | "if" | "else" }
+keywords = _{ "native" | "func" | "var" | "return" | "true" | "false" | "if" | "else" }
 // END Constants
 
 // This is a any valid identity.
 // - Function names
 // - Variable names
 ident = @{ !keywords ~ (!digit ~ (alpha | digit | underscore)+) }
+ref_ident = { ident ~ ("." ~ (ident | function_call))* }
 
 // START Strings
 string_literal_inner_d = { ((!quote_d) ~ ANY)* }
@@ -24,14 +25,14 @@ string_literal_single = @{ quote_s ~ string_literal_inner_s ~ quote_s }
 // END Strings
 
 // START Functions
-function_call = { ident ~ "(" ~ ((function_arg) ~ ("," ~ function_arg)*)? ~ ")"}
+function_call = { ref_ident ~ "(" ~ ((function_arg) ~ ("," ~ function_arg)*)? ~ ")"}
 function_arg = { val }
 
 function_arguments = { (ident ~ ("," ~ ident)*)? }
 
-function = { "func" ~ ident ~ "(" ~ function_arguments ~ ")" ~ "{" ~ function_body ~ "}"}
+function = { "func " ~ ident ~ "(" ~ function_arguments ~ ")" ~ "{" ~ function_body ~ "}"}
 
-return_statement = { "return" ~ val? ~ ";" }
+return_statement = { "return " ~ val? ~ ";" }
 
 function_body = {
 	(((statement))*)
@@ -40,7 +41,7 @@ function_body = {
 
 // START Native statement
 native_capture = { (!"\"" ~ ANY)* }
-native = { "native" ~ "\"" ~ native_capture ~ "\"" ~ ";" }
+native = { "native " ~ "\"" ~ native_capture ~ "\"" ~ ";" }
 // END Native statement
 
 statement = { 
@@ -61,20 +62,20 @@ b_true = _{ "true" }
 b_false = _{ "false" }
 boolean = { (b_true | b_false) }
 
-if_statement = { "if" ~ (function_call | boolean | ident) ~ "{" ~ function_body ~ "}" ~ ("else" ~ (if_statement | ("{" ~ function_body ~ "}")))? }
+if_statement = { "if" ~ (function_call | boolean | ref_ident) ~ "{" ~ function_body ~ "}" ~ ("else" ~ (if_statement | ("{" ~ function_body ~ "}")))? }
 // END If statement
 
 // START Math
 number = { prefix? ~ (ASCII_DIGIT{1,} ~ ("." ~ ASCII_DIGIT{1,})?) }
 
 // Simple equation: 1 + 2 * 10 / 5
-inline_math = { ((number) | ident) ~ (infix ~ ((number) | ident)){1,} }
+inline_math = { ((number) | ref_ident) ~ (infix ~ ((number) | ident)){1,} }
 
 group   =  { prefix* ~ primary ~ (infix ~ prefix* ~ primary )* }
 infix   =  { "+" | "-" | "*" | "/" | "%" }
 prefix  =  { "-" }
 // prefix_n = _{ "-" }
-primary = _{ ((number) | ident) | "(" ~ group ~ ")" }
+primary = _{ ((number) | ref_ident) | "(" ~ group ~ ")" }
 // END Math
 
 array = { "[" ~ ((val ~ ",")* ~ val)? ~ "]" }
@@ -84,9 +85,9 @@ array_index_num = { ASCII_DIGIT{1,} }
 array_index = { ident ~ index+ }
 index = { "[" ~ (array_index_num | val) ~ "]" }
 
-val = { ((array_index) | array) | function_call | (inline_math) | (primary) | (string_literal_double | string_literal_single) | boolean | ident }
+val = { ((array_index) | array) | function_call | (inline_math) | (primary) | (string_literal_double | string_literal_single) | boolean | ref_ident }
 
-variable = { "var" ~ ident ~ "=" ~ val ~ ";" }
+variable = { "var " ~ ident ~ "=" ~ val ~ ";" }
 variable_reassign = { ident ~ "=" ~ val ~ ";" }
 shorthand_assign = { ident ~ (add_assign | sub_assign | div_assign | mul_assign | mod_assign) ~ val ~ ";" }
 
@@ -96,7 +97,7 @@ div_assign = { "/=" }
 mul_assign = { "*=" }
 mod_assign = { "%=" }
 
-object = { "obj" ~ ident ~ "(" ~ function_arguments ~ ")" ~ "{" ~ declarations* ~ "}"}
+object = { "obj " ~ ident ~ "(" ~ function_arguments ~ ")" ~ "{" ~ declarations* ~ "}"}
 declarations = { variable | function | object }
 
 // tabs = _{ ("\t"*) }

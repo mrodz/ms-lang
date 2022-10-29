@@ -1,106 +1,34 @@
 
-~__GLOBALS__->func::main
+~__GLOBALS__->func(main)
 POPALL
 JMP __GLOBALS__
-SET $__VAL_INIT__#4225442826, 34
 
-LOAD $__VAL_INIT__#4225442826,
-JMP __GLOBALS__->func::factorial
-MOV $__VAL_INIT__#3977602593, $__RET__
-MOV $result_12476077, $__VAL_INIT__#3977602593
-MOV $__VAL_INIT__#2815813137, $result_12476077
+JMP __GLOBALS__->obj(dog)
+MOV $__VAL_INIT__#3541853270, $__RET__
+MOV $func(main)->var(d), $__VAL_INIT__#3541853270
+MOV $__VAL_INIT__#1981163516, $func(main)->var(d)
 
 
-LOAD $__VAL_INIT__#2815813137,
-JMP __GLOBALS__->func::print
+LOAD $__VAL_INIT__#1981163516,
+JMP __GLOBALS__->func(print)
 
 
 
-~__GLOBALS__->obj::greeter
-ARG 0, $message_1500007153
+~__GLOBALS__->func(print)
+ARG 0, $a_4079239141
 POPALL
-
-~__GLOBALS__->obj::greeter->func::greet
-POPALL
-MOV $__VAL_INIT__#4045472514, $message_1500007153
-
-
-LOAD $__VAL_INIT__#4045472514,
-JMP __GLOBALS__->func::print
-
-
-
-
-~__GLOBALS__->func::factorial
-ARG 0, $number_4248724637
-POPALL
-SET $__VAL_INIT__#299644839, 1
-MOV $__VAL_INIT__#3574316738, $number_4248724637
-
-
-LOAD $__VAL_INIT__#299644839,$__VAL_INIT__#3574316738,
-JMP __GLOBALS__->func::factorial_init
-MOV $__VAL_INIT__#73951731, $__RET__
-MOV $__RET__, $__VAL_INIT__#73951731
-
-
-
-~__GLOBALS__->func::factorial_init
-ARG 0, $result_861149920
-ARG 1, $limit_1704238004
-POPALL
-MOV $__VAL_INIT__#4106784128, $limit_1704238004
-
-MULT $result_861149920, $__VAL_INIT__#4106784128
-SET $__VAL_INIT__#200194202, 1
-SUB $limit_1704238004, $__VAL_INIT__#200194202
-MOV $__VAL_INIT__#3830257651, $limit_1704238004
-
-SET $__VAL_INIT__#1742934005, 0
-
-LOAD $__VAL_INIT__#3830257651,$__VAL_INIT__#1742934005,
-JMP __GLOBALS__->func::cmp
-MOV $__VAL_INIT__#1771041003, $__RET__
-IF $__VAL_INIT__#1771041003, func::factorial_init::<if#474093893>, func::factorial_init::<else#474093893>
-
-~func::factorial_init::<if#474093893>
-MOV $__VAL_INIT__#1160748050, $result_861149920
-
-MOV $__RET__, $__VAL_INIT__#1160748050
-
-
-~func::factorial_init::<else#474093893>
-MOV $__VAL_INIT__#2508443127, $result_861149920
-
-MOV $__VAL_INIT__#57474503, $limit_1704238004
-
-
-LOAD $__VAL_INIT__#2508443127,$__VAL_INIT__#57474503,
-JMP __GLOBALS__->func::factorial_init
-MOV $__VAL_INIT__#4127364549, $__RET__
-MOV $__RET__, $__VAL_INIT__#4127364549
-
-
-
-
-~__GLOBALS__->func::print
-ARG 0, $a_796951707
-POPALL
-LOAD $a_796951707
+LOAD $a_4079239141
 SYSCALLRM PrintLn
 
 
+~__GLOBALS__->obj(dog)
+SET $__VAL_INIT__#245311324, 20
+MOV $__GLOBALS__->obj(dog)->var(a), $__VAL_INIT__#245311324
 
-~__GLOBALS__->func::cmp
-ARG 0, $a_2323637336
-ARG 1, $b_521175160
+NEWOBJ $__RET__, __GLOBALS__->obj(dog)->var(a), __GLOBALS__->obj(dog)->func(bark), 
 POPALL
-SET $__VAL_INIT__#281766512, false
-MOV $result_46478374, $__VAL_INIT__#281766512
-EQU $result_46478374 $a_2323637336 $b_521175160
-MOV $__VAL_INIT__#2539542894, $result_46478374
-
-MOV $__RET__, $__VAL_INIT__#2539542894
+~__GLOBALS__->obj(dog)->func(bark)
+POPALL
 
 
 ~__GLOBALS__
