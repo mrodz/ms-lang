@@ -1,6 +1,7 @@
 func main() {
   var d = dog();
-  d.bark();
+  var b = d.a()
+  ;
   print(d);
 }
 

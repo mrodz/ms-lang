@@ -68,18 +68,6 @@ mod math_constants {
     }
 }
 
-macro_rules! dim {
-    ($($x:expr),+ $(,)?) => {{
-        let mut vec: Vec<Variable> = vec![];
-
-        $(
-            vec.push(var_from_str(stringify!($x).to_string()));
-        )*
-
-        vec
-    }};
-}
-
 macro_rules! get {
     ($var:ident as $type:tt) => {
         if let Variable::$type(cast) = $var {
@@ -205,6 +193,18 @@ impl std::ops::Add for Variable {
 
 #[cfg(test)]
 mod tests {
+    macro_rules! dim {
+        ($($x:expr),+ $(,)?) => {{
+            let mut vec: Vec<Variable> = vec![];
+    
+            $(
+                vec.push(var_from_str(stringify!($x).to_string()));
+            )*
+    
+            vec
+        }};
+    }
+    
     use super::*;
 
     #[test]

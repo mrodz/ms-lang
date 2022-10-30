@@ -15,7 +15,7 @@ keywords = _{ "native" | "func" | "var" | "return" | "true" | "false" | "if" | "
 // - Function names
 // - Variable names
 ident = @{ !keywords ~ (!digit ~ (alpha | digit | underscore)+) }
-ref_ident = { ident ~ ("." ~ (ident | function_call))* }
+ref_ident = { ((ident) ~ ("." ~ (ident | function_call))*) }
 
 // START Strings
 string_literal_inner_d = { ((!quote_d) ~ ANY)* }
@@ -85,7 +85,7 @@ array_index_num = { ASCII_DIGIT{1,} }
 array_index = { ident ~ index+ }
 index = { "[" ~ (array_index_num | val) ~ "]" }
 
-val = { ((array_index) | array) | function_call | (inline_math) | (primary) | (string_literal_double | string_literal_single) | boolean | ref_ident }
+val = { function_call | (array_index) | array | (inline_math) | (primary) | (string_literal_double | string_literal_single) | boolean | ref_ident }
 
 variable = { "var " ~ ident ~ "=" ~ val ~ ";" }
 variable_reassign = { ident ~ "=" ~ val ~ ";" }

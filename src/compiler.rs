@@ -474,7 +474,10 @@ impl Parser {
             } else {
                 "".to_string()
             },
-            get_fn_from_scope(&ident.to_string()).unwrap()
+            {
+                dbg!(&ident);
+                get_fn_from_scope(&ident.to_string()).unwrap()
+            }
         ))
     }
 
@@ -757,7 +760,7 @@ impl Parser {
             let mut joint_list = String::new();
 
             for variable in variables {
-                joint_list.push_str(format!("{}->var({variable}), ", top_frame!().name).as_str());
+                joint_list.push_str(format!("${}->var({variable}), ", top_frame!().name).as_str());
             }
 
             for member in members {
