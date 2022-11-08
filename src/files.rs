@@ -617,6 +617,22 @@ mod commands {
                         }
 
                         Ok(())
+                    } else if let Variable::String(d) = d {
+                        match d.get(index..=index) {
+                            Some(v) => {
+                                let cloned = Variable::String(v.to_string());
+                                variables.insert(dest.to_string(), cloned);
+                            }
+                            None => {
+                                return Err(MountError::new(format!(
+                                    "Index out of bounds on line {}: {index} >= len({})",
+                                    ctx.number,
+                                    d.len()
+                                )))
+                            }
+                        }
+
+                        Ok(())
                     } else {
                         Err(MountError::new(
                             format!(
