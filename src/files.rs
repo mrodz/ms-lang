@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::str::Lines;
+use std::time::Instant;
 
 use self::command_types::{Command, GlobalFunctions};
 use self::math_constants::*;
@@ -408,6 +409,7 @@ lazy_static! {
 }
 
 pub fn run_program(path: &String) {
+    let start = Instant::now();
     let mut variable_mapping = HashMap::<String, Variable>::new();
     let mut loaded_variables = Vec::<Variable>::new();
 
@@ -441,6 +443,8 @@ pub fn run_program(path: &String) {
         );
         return;
     }
+
+    println!("\r\nProcess exited successfully, Runtime: {}ms", start.elapsed().as_millis())
 }
 
 const ILLEGAL_OP: fn(String, u32) -> MountError = |name, number| MountError::new(format!(

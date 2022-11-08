@@ -15,7 +15,7 @@ keywords = _{ "native" | "func" | "var" | "return" | "true" | "false" | "if" | "
 // - Function names
 // - Variable names
 ident = @{ !keywords ~ (!digit ~ (alpha | digit | underscore)+) }
-ref_ident = { ((ident) ~ ("." ~ (ident | function_call))*) }
+ref_ident = _{ ((ident) ~ ("." ~ (ident | function_call))*) }
 
 // START Strings
 string_literal_inner_d = { ((!quote_d) ~ ANY)* }

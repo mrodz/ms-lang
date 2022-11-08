@@ -8,6 +8,7 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::prelude::*;
 use std::sync::Mutex;
+use std::time::Instant;
 
 use crate::files::Object;
 
@@ -876,6 +877,8 @@ impl Parser {
 pub fn compile(path: &String) -> Result<()> {
     use crate::files::read_file;
 
+    let start = Instant::now();
+
     let fio = read_file(path).unwrap();
 
     let mut i = path.len();
@@ -912,7 +915,8 @@ pub fn compile(path: &String) -> Result<()> {
 
     println!("Compilation Successful, writing to file...");
     let _ = file.write_all(buf.as_bytes());
-    println!("Done!\r\n");
+
+    println!("Done! Compiled in {}ms\r\n", start.elapsed().as_millis());
 
     Ok(())
 }

@@ -2,33 +2,30 @@
 ~__GLOBALS__->func(main)
 POPALL
 JMP __GLOBALS__
+SET $__MATH_RESULT__, 5
+MOV $__MATH_TEMP__#1008899798, $__MATH_RESULT__
+SET $__MATH_RESULT__, 10
+MOV $__MATH_TEMP__#1256842800, $__MATH_RESULT__
+MOV $__MATH_RESULT__, $__MATH_TEMP__#1008899798
+MULT $__MATH_RESULT__, $__MATH_TEMP__#1256842800
+DROP $__MATH_TEMP__#1008899798
+DROP $__MATH_TEMP__#1256842800
+MOV $__VAL_INIT__#2538562605, $__MATH_RESULT__
 
-JMP __GLOBALS__->obj(dog)
-MOV $__VAL_INIT__#3541853270, $__RET__
-MOV $func(main)->var(d), $__VAL_INIT__#3541853270
-MOV $__VAL_INIT__#1981163516, $func(main)->var(d)
+MOV $func(main)->var(d), $__VAL_INIT__#2538562605
+MOV $__VAL_INIT__#2750709170, $func(main)->var(d)
 
 
-LOAD $__VAL_INIT__#1981163516,
+LOAD $__VAL_INIT__#2750709170,
 JMP __GLOBALS__->func(print)
 
 
 
 ~__GLOBALS__->func(print)
-ARG 0, $a_4079239141
+ARG 0, $a_3667041115
 POPALL
-LOAD $a_4079239141
+LOAD $a_3667041115
 SYSCALLRM PrintLn
-
-
-~__GLOBALS__->obj(dog)
-SET $__VAL_INIT__#245311324, 20
-MOV $__GLOBALS__->obj(dog)->var(a), $__VAL_INIT__#245311324
-
-NEWOBJ $__RET__, __GLOBALS__->obj(dog)->var(a), __GLOBALS__->obj(dog)->func(bark), 
-POPALL
-~__GLOBALS__->obj(dog)->func(bark)
-POPALL
 
 
 ~__GLOBALS__
