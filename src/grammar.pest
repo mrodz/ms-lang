@@ -8,7 +8,19 @@ underscore = { "_" }
 WHITESPACE = _{ " " | NEWLINE }
 COMMENT = _{ "//" }
 
-keywords = _{ "native" | "func" | "var" | "return" | "true" | "false" | "if" | "else" }
+keywords = _{ 
+    "native" | 
+    "func" | 
+    "var" | 
+    "return" | 
+    "true" | 
+    "false" | 
+    "if" | 
+    "else" |
+    "each" |
+    "from" |
+    "to"
+}
 // END Constants
 
 // This is a any valid identity.
@@ -53,8 +65,15 @@ statement = {
         (
             function_call ~ ";"
         ) 
-        | native | if_statement
+        | native | if_statement | while_loop
     ) 
+}
+
+// for_loop = { 
+//     "each " ~ ident ~ "from" ~ val ~ " to" ~ "{" ~ function_body ~ "}"
+// }
+while_loop = {
+    "while " ~ boolean_predicate ~ "{" ~ function_body ~ "}"
 }
 
 // START If statement
@@ -62,7 +81,8 @@ b_true = _{ "true" }
 b_false = _{ "false" }
 boolean = { (b_true | b_false) }
 
-if_statement = { "if" ~ (function_call | boolean | ref_ident) ~ "{" ~ function_body ~ "}" ~ ("else" ~ (if_statement | ("{" ~ function_body ~ "}")))? }
+boolean_predicate = _{ function_call | boolean | ref_ident }
+if_statement = { "if " ~ boolean_predicate ~ "{" ~ function_body ~ "}" ~ ("else" ~ (if_statement | ("{" ~ function_body ~ "}")))? }
 // END If statement
 
 // START Math
@@ -72,7 +92,7 @@ number = { prefix? ~ (ASCII_DIGIT{1,} ~ ("." ~ ASCII_DIGIT{1,})?) }
 // Simple equation: 1 + 2 * 10 / 5
 inline_math = { ((number | string_literal_double) | ref_ident) ~ (infix ~ ((number | string_literal_double) | ident)){1,} }
 
-group   =  { prefix* ~ primary ~ (infix ~ prefix* ~ primary )* }
+group   =  { prefix* ~ primary ~ (infix ~ prefix* ~ primary)* }
 infix   =  { "+" | "-" | "*" | "/" | "%" }
 prefix  =  { "-" }
 // prefix_n = _{ "-" }

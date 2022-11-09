@@ -1,17 +1,16 @@
 func main() {
-  test(a);
+  var c = 0;
+
+  while true {
+    print(c);
+    c += 1;
+  }
 }
 
-func test(number) {
-  var result = "";
-
-  if equ(number % 5, 0) {
-    result = result + "Fizz";
-  }
-
-  if equ(number % 3, 0) {
-    result = result + "Buzz";
-  }
+func lt(a, b) {
+  var result = false;
+  native "LT $result, $a, $b";
+  return result;
 }
 
 func equ(a, b) {

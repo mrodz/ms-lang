@@ -255,7 +255,7 @@ fn gen_val_init(input: Node) -> Result<String> {
                 + format!(
                     "MOV {new_name}, {}\r\n",
                     get_var_from_scope(&other.to_string())
-                        .expect(format!("{new_name} is not in scope.").as_str())
+                        .expect(format!("{other} is not in scope.").as_str())
                 )
                 .as_str();
 
@@ -479,7 +479,6 @@ impl Parser {
                 "".to_string()
             },
             {
-                dbg!(&ident);
                 get_fn_from_scope(&ident.to_string()).unwrap()
             }
         ))
@@ -516,6 +515,40 @@ impl Parser {
         Ok(format!(
             "{val_init}\r\n{command} {compiled_name}, {val_dest}"
         ))
+    }
+
+    fn while_loop(input: Node) -> Result<(String, Vec<Option<String>>)> {
+        let mut children = input.children();
+
+        let _ = children.next();
+
+        let condition_init = gen_val_init(input)?;
+
+        let condition_init_dest = unsafe { &VAL_INIT_REF }.to_string();
+
+        let mut appendices: Vec<Option<String>> = vec![];
+
+        let seed = gen_seed!();
+        let name1 = format!("{}::<while#{}>", top_frame!().name, seed);
+
+        push_frame(&name1);
+        let looping = Self::function_body(children.next().unwrap())?;
+        pop_frame();
+
+        appendices.push({
+            let mut buf = format!("\r\n~{name1}::looping\r\n");
+            for line in looping {
+                buf.push_str((line + "\r\n").as_str())
+            }
+            buf.push_str(&("JMP ".to_owned() + &name1 + "\r\n"));
+            Some(buf)
+        });
+
+        appendices.push(Some(format!("~{name1}\r\nIF {condition_init_dest}, {name1}::looping,")));
+
+        Ok((format!(
+            "{condition_init}\r\nJMP {name1}\r\n"
+        ), appendices))
     }
 
     fn if_statement(input: Node) -> Result<(String, Vec<Option<String>>)> {
@@ -626,6 +659,13 @@ impl Parser {
                         result.push(if_statement.0 + "\r\n");
 
                         appendices.append(&mut if_statement.1);
+                    }
+                    Rule::while_loop => {
+                        let mut while_loop = Self::while_loop(part)?;
+
+                        result.push(while_loop.0 + "\r\n");
+
+                        appendices.append(&mut while_loop.1);
                     }
                     _ => panic!("not implemented: {:?}", rule),
                 }
