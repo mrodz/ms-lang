@@ -17,7 +17,8 @@ pub enum MathExpr {
     BinOp(Box<MathExpr>, BinOpKind, Box<MathExpr>),
     UnOp(UnOpKind, Box<MathExpr>),
     Number(f32),
-    Variable(String)
+    Variable(String),
+    String(String)
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -63,7 +64,8 @@ where
             (Rule::group, _) => Affix::Nilfix,
             (Rule::primary, _) => Affix::Nilfix,
             (Rule::number, _) 
-            | (Rule::ident, _) => Affix::Nilfix,
+            | (Rule::ident, _)
+            | (Rule::string_literal_double, _) => Affix::Nilfix,
             // (Rule::ident, _) => Affix::Nilfix
             _ => unreachable!("no rule implemented for {:?}", rule),
         };
@@ -79,6 +81,10 @@ where
 
                 let str_f32 = str.parse().unwrap();
                 MathExpr::Number(str_f32)
+            }
+            Rule::string_literal_double => {
+                let str = tree.as_str().trim();
+                MathExpr::String(str.to_string())
             }
             Rule::ident => {
                 let str = tree.as_str().trim();

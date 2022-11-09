@@ -66,16 +66,17 @@ if_statement = { "if" ~ (function_call | boolean | ref_ident) ~ "{" ~ function_b
 // END If statement
 
 // START Math
+
 number = { prefix? ~ (ASCII_DIGIT{1,} ~ ("." ~ ASCII_DIGIT{1,})?) }
 
 // Simple equation: 1 + 2 * 10 / 5
-inline_math = { ((number) | ref_ident) ~ (infix ~ ((number) | ident)){1,} }
+inline_math = { ((number | string_literal_double) | ref_ident) ~ (infix ~ ((number | string_literal_double) | ident)){1,} }
 
 group   =  { prefix* ~ primary ~ (infix ~ prefix* ~ primary )* }
 infix   =  { "+" | "-" | "*" | "/" | "%" }
 prefix  =  { "-" }
 // prefix_n = _{ "-" }
-primary = _{ ((number) | ref_ident) | "(" ~ group ~ ")" }
+primary = _{ ((number | string_literal_double) | ref_ident) | "(" ~ group ~ ")" }
 // END Math
 
 array = { "[" ~ ((val ~ ",")* ~ val)? ~ "]" }

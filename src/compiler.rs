@@ -199,6 +199,9 @@ pub(crate) fn eval_math(math: &str, destination: &String) -> Result<String> {
             MathExpr::Number(n) => {
                 res.push(format!("SET $__MATH_RESULT__, {n}"));
             }
+            MathExpr::String(s) => {
+                res.push(format!("SET $__MATH_RESULT__, {s}"));
+            }
             MathExpr::Variable(name) => {
                 let reference = get_var_from_scope(&name).unwrap();
                 res.push(format!("MOV $__MATH_RESULT__, {}", reference));

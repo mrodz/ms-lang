@@ -183,6 +183,10 @@ impl std::ops::Add for Variable {
                 let mut d2 = get!(rhs as Dim);
                 d1.append(&mut d2);
                 Some(Variable::Dim(d1))
+            } else if type1 & type2 & STRING == STRING {
+                let s1 = get!(self as String);
+                let s2 = get!(rhs as String);
+                Some(Variable::String(s1 + s2.as_str()))
             } else {
                 None
             }
@@ -1019,6 +1023,7 @@ mod commands {
                             
                             variables.insert(name1.to_string(), res);
                         } else {
+                            dbg!(&var1, var);
                             return Err(crate::files::ILLEGAL_OP(stringify!($name).to_string(), ctx.number));
                         }
                     } else {
